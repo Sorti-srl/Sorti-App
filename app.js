@@ -377,9 +377,10 @@
     return worst;
   }
 
-  function binGlyphHTML(fill, statusFill = fill) {
+  function binGlyphHTML(fill, statusFill = fill, key = "") {
     const f = clampPct(fill);
-    return `<div class="binGlyph ${statusOf(statusFill)}" aria-hidden="true"><div class="binGlyphFill" style="height:${f}%"></div></div>`;
+    const anim = key ? ` data-k="${escapeHtml(key)}" data-v="${f}"` : "";
+    return `<div class="binGlyph ${statusOf(statusFill)}" aria-hidden="true"><div class="binGlyphFill"${anim} style="height:${f}%"></div></div>`;
   }
 
   // Colori per frazione, ispirati alla raccolta differenziata italiana
@@ -428,7 +429,7 @@
   }
 
   // Mini visualizzazione a colonne: uno "scomparto" per colonna
-  function compStripHTML(obj) {
+  function compStripHTML(obj, keyPrefix = "") {
     const comps = compartmentsSorted(obj);
     if (!comps.length) return "";
     return `<div class="compStrip">${comps.map(c => {
@@ -437,7 +438,8 @@
       if (fill === null) {
         return `<span class="compCol nodata" title="${escapeHtml(label)}: nessun dato"></span>`;
       }
-      return `<span class="compCol ${statusOf(fill)}" title="${escapeHtml(label)}: ${Math.round(fill)}%"><i style="height:${fill}%"></i></span>`;
+      const anim = keyPrefix ? ` data-k="${escapeHtml(`${keyPrefix}|c${c?.compartment_id}`)}" data-v="${fill}"` : "";
+      return `<span class="compCol ${statusOf(fill)}" title="${escapeHtml(label)}: ${Math.round(fill)}%"><i${anim} style="height:${fill}%"></i></span>`;
     }).join("")}</div>`;
   }
 
@@ -460,7 +462,7 @@
     if (!parts.length) parts.push("tutti regolari");
     return `
       <div class="compInfo">
-        ${compStripHTML(obj)}
+        ${compStripHTML(obj, `${obj?.bin_id}|t`)}
         <div class="compText"><b>${comps.length}</b> scompart${comps.length === 1 ? "o" : "i"}<br>${parts.join(" · ")}</div>
       </div>`;
   }
@@ -1042,7 +1044,7 @@
 
       return `
         <div class="compCard">
-          <div class="compTank ${st}" aria-hidden="true"><i style="height:${fill ?? 0}%"></i></div>
+          <div class="compTank ${st}" aria-hidden="true"><i data-k="${escapeHtml(`dd|${bin?.bin_id}|${c?.compartment_id}`)}" data-v="${fill ?? 0}" style="height:${fill ?? 0}%"></i><span class="wave"></span></div>
           <div class="compBody">
             <div>
               <div class="compTitle" title="${escapeHtml(c.label || `Scomparto ${c.compartment_id}`)}">${escapeHtml(c.label || `Scomparto ${c.compartment_id}`)}</div>
@@ -1054,6 +1056,7 @@
         </div>
       `;
     }).join("");
+    animateLevels(body);
   }
 
   async function openBinDrawer(binId, { soft = false } = {}) {
@@ -1222,8 +1225,191 @@
 
   window.__lastCapGByBin = {};
 
+  // =========================================================
+  // Effetti live: attività, nuovi cestini, conferimenti, animazioni
+  // =========================================================
+  const ACTIVE_NOW_MIN = 15;
+  const prefersReducedMotion = () => window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
+
+  // Il cestino invia dati solo quando riconosce un rifiuto:
+  // misuriamo l'attività, non la connessione.
+  function activityOf(iso) {
+    const d = isoToDate(iso);
+    if (!d) return { cls: "idle", label: "Nessun conferimento" };
+    const min = (Date.now() - d.getTime()) / 60000;
+    if (min < ACTIVE_NOW_MIN) return { cls: "now", label: "Attivo ora" };
+    const today = new Date(); today.setHours(0, 0, 0, 0);
+    if (d >= today) return { cls: "today", label: "Attivo oggi" };
+    return { cls: "idle", label: "Inattivo" };
+  }
+
+  function activityHTML(iso) {
+    const a = activityOf(iso);
+    return `<span class="act ${a.cls}" title="${escapeHtml(a.label)} · ${escapeHtml(isoToNice(iso))}"><span class="actDot"></span><span data-col="last">${timeAgo(iso)}</span></span>`;
+  }
+
+  function renderActivitySummary(bins) {
+    let now = 0, today = 0;
+    for (const b of bins) {
+      const a = activityOf(b.last_seen).cls;
+      if (a === "now") now++;
+      if (a === "now" || a === "today") today++;
+    }
+    const el = $("activitySummary");
+    if (!el) return;
+    el.className = `act ${now ? "now" : today ? "today" : "idle"}`;
+    el.innerHTML = `<span class="actDot"></span>${now ? `<b>${now}</b> attiv${now === 1 ? "o" : "i"} ora` : `<b>${today}</b> attiv${today === 1 ? "o" : "i"} oggi`}`;
+  }
+
+  // --- Toast ---
+  function toast({ title, text, color, kind = "event" }) {
+    const box = $("toasts");
+    if (!box) return;
+    const el = document.createElement("div");
+    el.className = `toast ${kind}`;
+    el.innerHTML = `
+      <span class="toastIcon" style="${color ? `--tc:${color}` : ""}"></span>
+      <div class="toastBody"><div class="toastTitle">${title}</div>${text ? `<div class="toastText">${text}</div>` : ""}</div>`;
+    box.prepend(el);
+    while (box.children.length > 4) box.lastElementChild.remove();
+    setTimeout(() => { el.classList.add("out"); setTimeout(() => el.remove(), 350); }, 5200);
+  }
+
+  // --- Contatori animati ---
+  const kpiValues = {};
+  function animateNumber(id, to, fmt) {
+    const el = $(id);
+    if (!el) return;
+    el.classList.remove("skeleton");
+    const target = Number(to || 0);
+    const from = kpiValues[id];
+    kpiValues[id] = target;
+    if (prefersReducedMotion()) { el.textContent = fmt(target); return; }
+    const start = from ?? 0;
+    if (start === target) { el.textContent = fmt(target); return; }
+    if (from !== undefined && target > from) {
+      el.classList.remove("bump"); void el.offsetWidth; el.classList.add("bump");
+    }
+    const dur = from === undefined ? 1100 : 700;
+    const t0 = performance.now();
+    const ease = (t) => 1 - Math.pow(1 - t, 3);
+    const step = (now) => {
+      const t = Math.min(1, (now - t0) / dur);
+      el.textContent = fmt(start + (target - start) * ease(t));
+      if (t < 1) requestAnimationFrame(step);
+    };
+    requestAnimationFrame(step);
+  }
+
+  // --- Livelli animati tra un aggiornamento e l'altro ---
+  // Gli elementi con data-k / data-v / data-p partono dal valore precedente
+  // e salgono (o scendono) fino al nuovo, invece di saltare.
+  const levelMemory = {};
+  function animateLevels(root) {
+    if (!root) return;
+    const els = root.querySelectorAll("[data-k]");
+    const pending = [];
+    els.forEach(el => {
+      const k = el.getAttribute("data-k");
+      const v = Number(el.getAttribute("data-v"));
+      const p = el.getAttribute("data-p") || "height";
+      const prev = levelMemory[k];
+      const startVal = prev === undefined ? 0 : prev;
+      levelMemory[k] = v;
+      if (startVal === v || prefersReducedMotion()) { el.style[p] = `${v}%`; return; }
+      el.style.transition = "none";
+      el.style[p] = `${startVal}%`;
+      pending.push([el, p, v]);
+    });
+    if (!pending.length) return;
+    void root.offsetWidth;
+    requestAnimationFrame(() => {
+      for (const [el, p, v] of pending) {
+        el.style.transition = "";
+        el.style[p] = `${v}%`;
+      }
+    });
+  }
+
+  // --- Rilevamento novità ---
+  const LS_KNOWN_BINS = "sorti_known_bins_v1";
+  let knownBins = null;            // Set dei cestini già visti (persistente)
+  let prevWeights = null;          // bin_id -> peso al refresh precedente
+  let seenEventIds = null;         // id eventi già visti
+  const freshBins = new Map();     // bin_id -> "new" | "event", per l'evidenziazione
+
+  function markFresh(binId, kind) {
+    freshBins.set(String(binId), kind);
+    setTimeout(() => freshBins.delete(String(binId)), 4000);
+  }
+
+  function detectChanges(bins, dash) {
+    // 1) Nuovi cestini
+    if (!knownBins) {
+      try { knownBins = new Set(JSON.parse(localStorage.getItem(LS_KNOWN_BINS) || "null") || []); }
+      catch { knownBins = new Set(); }
+      const firstEver = knownBins.size === 0;
+      for (const b of bins) {
+        if (!knownBins.has(b.bin_id) && !firstEver) {
+          markFresh(b.bin_id, "new");
+          toast({ kind: "new", title: "Nuovo cestino connesso", text: `<b>${escapeHtml(b.bin_id)}</b> ha iniziato a inviare dati` });
+        }
+        knownBins.add(b.bin_id);
+      }
+    } else {
+      for (const b of bins) {
+        if (!knownBins.has(b.bin_id)) {
+          knownBins.add(b.bin_id);
+          markFresh(b.bin_id, "new");
+          toast({ kind: "new", title: "Nuovo cestino connesso", text: `<b>${escapeHtml(b.bin_id)}</b> ha iniziato a inviare dati` });
+        }
+      }
+    }
+    localStorage.setItem(LS_KNOWN_BINS, JSON.stringify([...knownBins]));
+
+    // 2) Nuovi conferimenti: dagli eventi (con Admin key) oppure dal peso
+    const events = dash?.is_admin ? (dash?.recent_events || []) : null;
+    const notifiedBins = new Set();
+
+    if (events) {
+      const ids = events.map(e => String(e.id ?? `${e.ts}|${e.bin_id}`));
+      if (seenEventIds) {
+        const fresh = events.filter((e, i) => !seenEventIds.has(ids[i])).slice(0, 3).reverse();
+        for (const e of fresh) {
+          notifiedBins.add(e.bin_id);
+          if (freshBins.get(String(e.bin_id)) !== "new") markFresh(e.bin_id, "event");
+          toast({
+            title: `+${formatWeight(e.weight_g)} di ${escapeHtml(e.material || "rifiuto")}`,
+            text: `${escapeHtml(e.bin_id)} · ${formatCO2(e.co2_saved_g)} CO₂ risparmiata`,
+            color: materialColor(e.material)
+          });
+        }
+      }
+      seenEventIds = new Set(ids);
+    }
+
+    const weights = {};
+    for (const b of bins) weights[b.bin_id] = Number(b.current_weight_g || 0);
+    if (prevWeights) {
+      for (const b of bins) {
+        const before = prevWeights[b.bin_id];
+        const delta = weights[b.bin_id] - (before ?? weights[b.bin_id]);
+        if (delta > 0 && !notifiedBins.has(b.bin_id)) {
+          if (freshBins.get(String(b.bin_id)) !== "new") markFresh(b.bin_id, "event");
+          if (!events) toast({ title: `+${formatWeight(delta)} conferiti`, text: `${escapeHtml(b.bin_id)}` });
+        }
+      }
+    }
+    prevWeights = weights;
+  }
+
+  function freshClass(binId) {
+    const k = freshBins.get(String(binId));
+    return k === "new" ? "isNew" : k === "event" ? "isEvent" : "";
+  }
+
   function renderBinsDesktopAndMobile(bins, onlyAlerts) {
-    const binsSig = `${thresholds.warn}|${thresholds.critical}|` + (onlyAlerts ? "ONLY|" : "ALL|") + bins.map(b =>
+    const binsSig = `${thresholds.warn}|${thresholds.critical}|${[...freshBins].join(",")}|` + (onlyAlerts ? "ONLY|" : "ALL|") + bins.map(b =>
       `${b.bin_id}|${Number(b.capacity_g || 0)}|${Number(b.current_weight_g || 0)}|${b.last_seen || ""}|${getFillPercent(b)}|${JSON.stringify(getCompartments(b))}`
     ).join(";;");
 
@@ -1236,6 +1422,7 @@
       };
 
       const rowsHTML = bins.map(b => {
+        const i = "t";
         const fill = getFillPercent(b);
         const sFill = binStatusFill(b);
         const p = priorityOf(sFill);
@@ -1246,10 +1433,10 @@
         window.__lastCapGByBin[b.bin_id] = Number(b.capacity_g || 0);
 
         return `
-          <tr id="binrow-${id}" class="${priClass}" data-bin="${id}" title="Apri dettagli">
+          <tr id="binrow-${id}" class="${priClass} ${freshClass(b.bin_id)}" data-bin="${id}" title="Apri dettagli">
             <td>
               <div class="binCell">
-                ${binGlyphHTML(fill, sFill)}
+                ${binGlyphHTML(fill, sFill, `${b.bin_id}|glyph|${i}`)}
                 <div>
                   <div class="binId">${id}</div>
                   <div class="binMeta">${fillBadge(sFill)}</div>
@@ -1259,7 +1446,7 @@
             <td data-col="fill">
               <div class="fillCell">
                 <span class="fillPct">${Math.round(fill)}%</span>
-                <span class="bar"><div style="width:${clampPct(fill)}%; background:${barColor(fill)}"></div></span>
+                <span class="bar"><div data-k="${id}|bar" data-v="${clampPct(fill)}" data-p="width" style="width:${clampPct(fill)}%; background:${barColor(fill)}"></div></span>
               </div>
               <div class="binMeta">fonte: ${source}</div>
             </td>
@@ -1267,7 +1454,7 @@
             <td class="weightCell" data-col="weight">
               <b>${formatWeight(b.current_weight_g)}</b> <span class="of">/ ${fmtKg(b.capacity_g)}</span>
             </td>
-            <td data-col="last" class="lastCell" title="${escapeHtml(isoToNice(b.last_seen))}">${timeAgo(b.last_seen)}</td>
+            <td class="lastCell">${activityHTML(b.last_seen)}</td>
           </tr>
         `;
       }).join("");
@@ -1276,6 +1463,7 @@
       safeHTML("binsBody", rowsHTML || `<tr class="emptyRow"><td colspan="5">${emptyMsg}</td></tr>`);
 
       const cards = bins.map(b => {
+        const i = "m";
         const fill = getFillPercent(b);
         const sFill = binStatusFill(b);
         const p = priorityOf(sFill);
@@ -1283,30 +1471,32 @@
         const id = escapeHtml(b.bin_id);
 
         return `
-          <div id="bincard-${id}" class="binCard ${priClass}" data-bin="${id}">
+          <div id="bincard-${id}" class="binCard ${priClass} ${freshClass(b.bin_id)}" data-bin="${id}">
             <div class="binCardTop">
               <div class="binCell">
-                ${binGlyphHTML(fill, sFill)}
+                ${binGlyphHTML(fill, sFill, `${b.bin_id}|glyph|${i}`)}
                 <div>
                   <div class="binId">${id}</div>
                   <div class="binMeta">${fillBadge(sFill)}</div>
                 </div>
               </div>
-              ${compStripHTML(b)}
+              ${compStripHTML(b, `${b.bin_id}|m`)}
             </div>
             <div class="binCardRow">
               <span class="fillPct">${Math.round(fill)}%</span>
-              <span class="bar"><div style="width:${clampPct(fill)}%; background:${barColor(fill)}"></div></span>
+              <span class="bar"><div data-k="${id}|mbar" data-v="${clampPct(fill)}" data-p="width" style="width:${clampPct(fill)}%; background:${barColor(fill)}"></div></span>
             </div>
             <div class="binCardFoot">
               <span><b style="color:var(--text-2)">${formatWeight(b.current_weight_g)}</b> / ${fmtKg(b.capacity_g)}</span>
-              <span title="${escapeHtml(isoToNice(b.last_seen))}">Ultimo segnale <span data-col="last">${timeAgo(b.last_seen)}</span></span>
+              ${activityHTML(b.last_seen)}
             </div>
           </div>
         `;
       }).join("");
 
       safeHTML("binsCards", cards || `<div class="emptyState">${emptyMsg}</div>`);
+      animateLevels($("binsBody"));
+      animateLevels($("binsCards"));
     }
 
     syncResponsiveBinsView();
@@ -1340,8 +1530,8 @@
 
       lastIsAdmin = !!dash?.is_admin;
 
-      safeText("kpiTotalWeight", formatWeight(dash?.totals?.total_weight_g));
-      safeText("kpiTotalCO2", formatCO2(dash?.totals?.total_co2_saved_g));
+      animateNumber("kpiTotalWeight", dash?.totals?.total_weight_g, formatWeight);
+      animateNumber("kpiTotalCO2", dash?.totals?.total_co2_saved_g, formatCO2);
 
       let binsAll = (dash?.bins || []).slice();
       safeText("binsCount", binsAll.length.toString());
@@ -1358,14 +1548,16 @@
       const onlyAlerts = !!$("onlyAlerts").checked;
       const bins = onlyAlerts ? binsAll.filter(b => priorityOf(binStatusFill(b)) > 0) : binsAll;
 
+      detectChanges(binsAll, dash);
+      renderActivitySummary(binsAll);
       renderBinsDesktopAndMobile(bins, onlyAlerts);
 
       const daily = dash?.daily || [];
       const rangeW = daily.reduce((s, r) => s + Number(r.weight_g || 0), 0);
       const rangeC = daily.reduce((s, r) => s + Number(r.co2_saved_g || 0), 0);
 
-      safeText("kpiRangeWeight", formatWeight(rangeW));
-      safeText("kpiRangeCO2", formatCO2(rangeC));
+      animateNumber("kpiRangeWeight", rangeW, formatWeight);
+      animateNumber("kpiRangeCO2", rangeC, formatCO2);
 
       $("lineEmpty").style.display = daily.some(r => Number(r.co2_saved_g || 0) > 0) ? "none" : "block";
       lineChart.data.labels = daily.map(r => r.day);

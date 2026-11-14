@@ -25,7 +25,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
 
-  <link rel="stylesheet" href="./app.css?v=200">
+  <link rel="stylesheet" href="./app.css?v=210">
 </head>
 
 <body>
@@ -109,7 +109,7 @@
           <span class="label">CO₂ risparmiata</span>
           <span class="kpiIcon"><svg class="ico"><use href="#i-leaf" /></svg></span>
         </div>
-        <div id="kpiRangeCO2" class="value num">—</div>
+        <div id="kpiRangeCO2" class="value num skeleton">—</div>
         <div class="hint"><span class="rangeHint">Ultimi 30 giorni</span></div>
       </div>
       <div class="kpi">
@@ -117,7 +117,7 @@
           <span class="label">Rifiuti raccolti</span>
           <span class="kpiIcon"><svg class="ico"><use href="#i-scale" /></svg></span>
         </div>
-        <div id="kpiRangeWeight" class="value num">—</div>
+        <div id="kpiRangeWeight" class="value num skeleton">—</div>
         <div class="hint"><span class="rangeHint">Ultimi 30 giorni</span></div>
       </div>
       <div class="kpi">
@@ -125,7 +125,7 @@
           <span class="label">CO₂ totale</span>
           <span class="kpiIcon"><svg class="ico"><use href="#i-globe" /></svg></span>
         </div>
-        <div id="kpiTotalCO2" class="value num">—</div>
+        <div id="kpiTotalCO2" class="value num skeleton">—</div>
         <div class="hint">Storico completo</div>
       </div>
       <div class="kpi">
@@ -133,7 +133,7 @@
           <span class="label">Totale raccolto</span>
           <span class="kpiIcon"><svg class="ico"><use href="#i-stack" /></svg></span>
         </div>
-        <div id="kpiTotalWeight" class="value num">—</div>
+        <div id="kpiTotalWeight" class="value num skeleton">—</div>
         <div class="hint">Storico completo</div>
       </div>
     </section>
@@ -146,6 +146,7 @@
           <h2 class="title">Cestini</h2>
           <div class="cardSub">
             <b id="binsCount" class="num">—</b> cestini ·
+            <span id="activitySummary" class="act idle"><span class="actDot"></span>—</span> ·
             <span id="alertSummary" class="chip ok">Tutto regolare</span>
           </div>
         </div>
@@ -172,7 +173,7 @@
               <th>Riempimento</th>
               <th>Scomparti</th>
               <th>Peso / Capacità</th>
-              <th class="right">Ultimo segnale</th>
+              <th class="right">Attività</th>
             </tr>
           </thead>
           <tbody id="binsBody"></tbody>
@@ -238,6 +239,8 @@
       <span class="muted">SmartBin Console</span>
     </footer>
   </main>
+
+  <div id="toasts" class="toasts" aria-live="polite"></div>
 
   <!-- Dettaglio cestino -->
   <div id="drawerOverlay" class="drawerOverlay" aria-hidden="true"></div>
@@ -392,8 +395,8 @@
   </dialog>
 
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-  <script src="./config.js?v=200"></script>
-  <script src="./app.js?v=200"></script>
+  <script src="./config.js?v=210"></script>
+  <script src="./app.js?v=210"></script>
 </body>
 
 </html>

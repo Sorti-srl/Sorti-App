@@ -711,3 +711,123 @@ tbody tr:last-child td{ border-bottom:none; }
 @media (prefers-reduced-motion: reduce){
   *{ animation:none !important; transition:none !important; }
 }
+
+/* =========================================================
+   Effetti live
+   ========================================================= */
+
+/* Stato di attività (il cestino trasmette a ogni conferimento) */
+.act{ display:inline-flex; align-items:center; gap:7px; white-space:nowrap; color:var(--muted); font-size:12.5px; }
+.act b{ color:var(--text-2); }
+.actDot{ position:relative; width:8px; height:8px; border-radius:999px; background:var(--muted-2); flex:0 0 auto; }
+.act.today .actDot{ background:var(--ok); opacity:.55; }
+.act.now{ color:var(--ok-ink); font-weight:600; }
+.act.now .actDot{ background:var(--ok); }
+.act.now .actDot::after{
+  content:""; position:absolute; inset:0; border-radius:999px; background:var(--ok);
+  animation: ripple 1.8s ease-out infinite;
+}
+@keyframes ripple{ from{ transform:scale(1); opacity:.6 } to{ transform:scale(3.2); opacity:0 } }
+.lastCell .act{ justify-content:flex-end; }
+
+/* Skeleton durante il primo caricamento */
+.skeleton{
+  color:transparent !important;
+  border-radius:8px;
+  width:62%;
+  background: linear-gradient(90deg, var(--surface-3) 0%, var(--border) 50%, var(--surface-3) 100%);
+  background-size:200% 100%;
+  animation: shimmer 1.2s linear infinite;
+}
+.kpiHero .skeleton{ background: linear-gradient(90deg, rgba(255,255,255,.14), rgba(255,255,255,.3), rgba(255,255,255,.14)); background-size:200% 100%; }
+@keyframes shimmer{ from{ background-position:200% 0 } to{ background-position:-200% 0 } }
+
+/* Il numero "salta" quando cresce */
+.value.bump{ animation: bump .6s cubic-bezier(.2,.9,.3,1.4); }
+@keyframes bump{ 0%{ transform:none } 35%{ transform: translateY(-3px) scale(1.04) } 100%{ transform:none } }
+.kpi .value{ transform-origin:left center; }
+
+/* Livelli che salgono */
+.compCol > i{ transition: height .9s cubic-bezier(.2,.8,.2,1); }
+.bar > div{ transition: width .9s cubic-bezier(.2,.8,.2,1); }
+.binGlyphFill{ transition: height .9s cubic-bezier(.2,.8,.2,1); }
+.compTank > i{ transition: height 1s cubic-bezier(.2,.8,.2,1); }
+
+/* Evidenziazione: nuovo conferimento / nuovo cestino */
+.binsTable tbody tr.isEvent td{ animation: flashEvent 2.4s ease-out; }
+.binsTable tbody tr.isNew td{ animation: flashNew 3.2s ease-out; }
+.binCard.isEvent{ animation: flashEventCard 2.4s ease-out; }
+.binCard.isNew{ animation: flashNewCard 3.2s ease-out; }
+@keyframes flashEvent{ 0%,25%{ background: color-mix(in srgb, var(--brand) 14%, transparent); } 100%{ background: transparent; } }
+@keyframes flashNew{
+  0%{ background: color-mix(in srgb, var(--brand) 22%, transparent); }
+  40%{ background: color-mix(in srgb, var(--brand) 12%, transparent); }
+  100%{ background: transparent; }
+}
+@keyframes flashEventCard{ 0%,25%{ box-shadow: 0 0 0 2px var(--brand), var(--shadow-sm); } 100%{ box-shadow: var(--shadow-sm); } }
+@keyframes flashNewCard{ 0%{ transform: translateY(8px) scale(.98); opacity:0; box-shadow:0 0 0 2px var(--brand) } 20%{ transform:none; opacity:1 } 100%{ box-shadow: var(--shadow-sm); } }
+
+/* Onda nel livello degli scomparti (dettaglio cestino) */
+.compTank .wave{ display:none; }
+.compTank > i::before{
+  content:""; position:absolute; left:0; top:-5px; width:200%; height:6px;
+  background:currentColor;
+  -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='20' height='6' viewBox='0 0 20 6'%3E%3Cpath d='M0 3 Q5 0 10 3 T20 3 V6 H0Z' fill='black'/%3E%3C/svg%3E") repeat-x 0 0 / 20px 6px;
+          mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='20' height='6' viewBox='0 0 20 6'%3E%3Cpath d='M0 3 Q5 0 10 3 T20 3 V6 H0Z' fill='black'/%3E%3C/svg%3E") repeat-x 0 0 / 20px 6px;
+  animation: wave 1.6s linear infinite;
+}
+.compTank.ok > i{ color:var(--ok); }
+.compTank.warn > i{ color:var(--warn); }
+.compTank.crit > i{ color:var(--crit); }
+.compTank.nodata > i::before{ display:none; }
+.compTank > i[style*="height:0%"]::before{ display:none; }
+@keyframes wave{ from{ transform: translateX(0) } to{ transform: translateX(-20px) } }
+
+/* Toast */
+.toasts{
+  position:fixed; right:20px; bottom:20px; z-index:80;
+  display:flex; flex-direction:column; gap:8px;
+  width:min(340px, calc(100vw - 32px));
+  pointer-events:none;
+}
+.toast{
+  pointer-events:auto;
+  display:flex; align-items:center; gap:12px;
+  padding:12px 14px;
+  border-radius:var(--r);
+  background:var(--surface);
+  border:1px solid var(--border);
+  box-shadow: var(--shadow-lg);
+  animation: toastIn .45s cubic-bezier(.2,.9,.3,1.2);
+  position:relative; overflow:hidden;
+}
+.toast::after{
+  /* barra di durata */
+  content:""; position:absolute; left:0; bottom:0; height:2px; width:100%;
+  background:var(--brand-grad); transform-origin:left;
+  animation: toastLife 5.2s linear forwards;
+}
+.toast.out{ animation: toastOut .35s ease-in forwards; }
+.toastIcon{
+  --tc: var(--brand);
+  width:34px; height:34px; border-radius:10px; flex:0 0 auto;
+  background: color-mix(in srgb, var(--tc) 16%, transparent);
+  position:relative;
+}
+.toastIcon::before{
+  /* mini cestino */
+  content:""; position:absolute; left:11px; top:11px; width:12px; height:14px;
+  border:2px solid var(--tc); border-top:none; border-radius:2px 2px 4px 4px;
+}
+.toastIcon::after{
+  content:""; position:absolute; left:9px; top:8px; width:16px; height:2px; border-radius:2px; background:var(--tc);
+}
+.toast.new .toastIcon{ background: var(--brand-grad); }
+.toast.new .toastIcon::before{ border-color:#fff; }
+.toast.new .toastIcon::after{ background:#fff; }
+.toastTitle{ font-weight:800; font-size:13.5px; }
+.toastText{ font-size:12.5px; color:var(--muted); margin-top:1px; }
+@keyframes toastIn{ from{ opacity:0; transform: translateY(14px) scale(.96) } to{ opacity:1; transform:none } }
+@keyframes toastOut{ to{ opacity:0; transform: translateX(30px) } }
+@keyframes toastLife{ from{ transform:scaleX(1) } to{ transform:scaleX(0) } }
+@media (max-width:640px){ .toasts{ right:16px; left:16px; bottom:16px; width:auto; } }
