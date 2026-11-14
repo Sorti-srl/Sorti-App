@@ -1732,6 +1732,14 @@
     window.__openBin = (binId) => openBinDrawer(binId);
   }
 
+  // Funzioni condivise con report.js (report ESG)
+  window.__sorti = {
+    apiUrl, fetchJSON, adminKey, formatWeight, materialColor, statusOf,
+    getFillPercent, binStatusFill, getFillSource, getCompartments, isoToDate,
+    customAlert, customPrompt, STATUS_LABEL,
+    getRangeDays: () => Number($("rangeSel").value || 30),
+  };
+
   document.addEventListener("DOMContentLoaded", () => {
     loadThresholds();
     updateThresholdLabels();

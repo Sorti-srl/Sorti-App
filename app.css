@@ -831,3 +831,10 @@ tbody tr:last-child td{ border-bottom:none; }
 @keyframes toastOut{ to{ opacity:0; transform: translateX(30px) } }
 @keyframes toastLife{ from{ transform:scaleX(1) } to{ transform:scaleX(0) } }
 @media (max-width:640px){ .toasts{ right:16px; left:16px; bottom:16px; width:auto; } }
+
+/* Azioni intestazione pagina */
+.pageActions{ display:flex; align-items:flex-end; gap:10px; flex-wrap:wrap; }
+.btn.busy{ opacity:.75; cursor:progress; }
+.btn.busy .ico{ animation: spin 1s linear infinite; }
+@keyframes spin{ to{ transform: rotate(360deg) } }
+@media (max-width:640px){ .pageActions{ width:100%; } .pageActions .field{ flex:1; } .pageActions select{ min-width:0; width:100%; } }
