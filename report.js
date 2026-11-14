@@ -9,13 +9,13 @@
 
   // Palette Sorti (ARGB per Excel)
   const C = {
-    green: "FF43CEA2",
-    brand: "FF14A37F",
-    blue: "FF185A9D",
+    green: "FF7EDA55",   // verde lime Sorti
+    brand: "FF132A4D",   // intestazioni tabelle (blu notte chiaro)
+    blue: "FF09182F",    // blu notte Sorti
     ink: "FF0F1E1B",
     muted: "FF66766F",
-    soft: "FFEAF7F2",
-    softBlue: "FFEAF1FA",
+    soft: "FFF0F9EA",
+    softBlue: "FFEAEEF5",
     line: "FFE2E8E6",
     white: "FFFFFFFF",
     warnSoft: "FFFFF6DB",
@@ -153,40 +153,49 @@
   }
 
   // ---------- Immagini (logo e grafici) ----------
+  function loadImage(src) {
+    return new Promise((resolve, reject) => {
+      const img = new Image();
+      img.onload = () => resolve(img);
+      img.onerror = reject;
+      img.src = src;
+    });
+  }
+
+  // Banner con il logo ufficiale Sorti su fondo blu notte
   async function brandBanner() {
     try { await document.fonts?.ready; } catch { }
     const W = 1040, H = 170;
     const c = document.createElement("canvas");
     c.width = W; c.height = H;
     const x = c.getContext("2d");
-    x.fillStyle = "#ffffff"; x.fillRect(0, 0, W, H);
+    x.fillStyle = "#09182F"; x.fillRect(0, 0, W, H);
 
-    const grad = x.createLinearGradient(0, 0, 120, 120);
-    grad.addColorStop(0, "#43cea2"); grad.addColorStop(1, "#185a9d");
-    const rr = (px, py, w, h, r) => { x.beginPath(); x.roundRect(px, py, w, h, r); };
+    let logoW = 0;
+    try {
+      const logo = await loadImage("./assets/sorti-logo.png");
+      const h = 104, w = Math.round(logo.width * (h / logo.height));
+      x.imageSmoothingQuality = "high";
+      x.drawImage(logo, 28, (H - 8 - h) / 2, w, h);
+      logoW = w;
+    } catch {
+      x.fillStyle = "#7EDA55";
+      x.font = `800 72px "Plus Jakarta Sans", Arial, sans-serif`;
+      x.fillText("SORTI", 40, 108);
+      logoW = 240;
+    }
 
-    // Marchio: quadrato con tre "scomparti"
-    x.fillStyle = grad; rr(20, 25, 120, 120, 33); x.fill();
-    x.fillStyle = "rgba(255,255,255,.55)"; rr(48, 82, 16, 36, 8); x.fill();
-    x.fillStyle = "#ffffff"; rr(72, 61, 16, 57, 8); x.fill();
-    x.fillStyle = "rgba(255,255,255,.8)"; rr(96, 71, 16, 47, 8); x.fill();
-
-    // Wordmark
     const font = '"Plus Jakarta Sans", "Segoe UI", Arial, sans-serif';
-    const tg = x.createLinearGradient(170, 0, 400, 0);
-    tg.addColorStop(0, "#14a37f"); tg.addColorStop(1, "#185a9d");
-    x.fillStyle = tg;
-    x.font = `800 84px ${font}`;
-    x.textBaseline = "alphabetic";
-    x.fillText("sorti", 168, 108);
-    x.fillStyle = "#66766f";
-    x.font = `700 22px ${font}`;
-    x.fillText("SMARTBIN CONSOLE  ·  REPORT ESG", 172, 145);
+    const tx = 28 + logoW + 36;
+    x.fillStyle = "rgba(255,255,255,.18)"; x.fillRect(tx - 18, 40, 2, 82);
+    x.fillStyle = "#ffffff";
+    x.font = `800 34px ${font}`;
+    x.fillText("Report ESG", tx, 82);
+    x.fillStyle = "#7EDA55";
+    x.font = `700 20px ${font}`;
+    x.fillText("Butta qui, smista lui.", tx, 116);
 
-    // Linea gradiente firma
-    const lg = x.createLinearGradient(0, 0, W, 0);
-    lg.addColorStop(0, "#43cea2"); lg.addColorStop(1, "#185a9d");
-    x.fillStyle = lg; x.fillRect(0, H - 6, W, 6);
+    x.fillStyle = "#7EDA55"; x.fillRect(0, H - 8, W, 8);
     return c.toDataURL("image/png");
   }
 
@@ -224,12 +233,12 @@
             {
               type: "line", label: "CO₂e evitata (kg)", yAxisID: "y1",
               data: data.daily.map(r => kg(r.co2_g)),
-              borderColor: "#185a9d", backgroundColor: "#185a9d", borderWidth: 2.5, pointRadius: 0, tension: .35
+              borderColor: "#09182F", backgroundColor: "#09182F", borderWidth: 2.5, pointRadius: 0, tension: .35
             },
             {
               label: "Rifiuti raccolti (kg)", yAxisID: "y",
               data: data.daily.map(r => kg(r.weight_g)),
-              backgroundColor: "rgba(67,206,162,.75)", borderRadius: 3
+              backgroundColor: "rgba(126,218,85,.85)", borderRadius: 3
             }
           ]
         },
@@ -238,7 +247,7 @@
           scales: {
             x: { grid: { display: false }, ticks: { font, color: "#66766f", maxRotation: 0, autoSkipPadding: 14 } },
             y: { beginAtZero: true, grid: { color: "#e9eeec" }, ticks: { font, color: "#66766f" }, title: { display: true, text: "kg rifiuti", font, color: "#66766f" } },
-            y1: { beginAtZero: true, position: "right", grid: { display: false }, ticks: { font, color: "#185a9d" }, title: { display: true, text: "kg CO₂e", font, color: "#185a9d" } }
+            y1: { beginAtZero: true, position: "right", grid: { display: false }, ticks: { font, color: "#09182F" }, title: { display: true, text: "kg CO₂e", font, color: "#09182F" } }
           }
         }
       }, 820, 320);
@@ -276,7 +285,7 @@
     ws.mergeCells(2, 1, 2, cols);
     const t = ws.getCell(1, 1);
     t.value = title;
-    t.font = { name: "Calibri", size: 16, bold: true, color: { argb: C.white } };
+    t.font = { name: "Calibri", size: 16, bold: true, color: { argb: C.green } };
     t.fill = fill(C.blue);
     t.alignment = { vertical: "middle", indent: 1 };
     ws.getRow(1).height = 30;
@@ -347,8 +356,8 @@
     // ===== 1. Sintesi =====
     const ws = wb.addWorksheet("Sintesi", { views: [{ showGridLines: false }], properties: { tabColor: { argb: C.green } } });
     ws.columns = [{ width: 3 }, { width: 64 }, { width: 18 }, { width: 12 }, { width: 3 }, { width: 22 }, { width: 22 }, { width: 22 }];
-    ws.addImage(bannerId, { tl: { col: 1, row: 0.3 }, ext: { width: 520, height: 85 } });
-    for (let r = 1; r <= 5; r++) ws.getRow(r).height = 18;
+    ws.addImage(bannerId, { tl: { col: 1, row: 0.3 }, ext: { width: 640, height: 105 } });
+    for (let r = 1; r <= 6; r++) ws.getRow(r).height = 18;
 
     const put = (r, c, v, style = {}) => { const cell = ws.getCell(r, c); cell.value = v; Object.assign(cell, style); return cell; };
     put(7, 2, "Report ESG · Gestione dei rifiuti", { font: { size: 20, bold: true, color: { argb: C.ink } } });
