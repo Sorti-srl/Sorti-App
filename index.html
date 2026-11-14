@@ -4,146 +4,175 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>Sorti SmartBin Dashboard</title>
+  <title>Sorti · SmartBin Console</title>
 
-  <meta name="theme-color" content="#0b1220" />
+  <meta name="theme-color" content="#0f2a2a" />
+
+  <script>
+    // Applica il tema prima del primo paint (evita flash)
+    (function () {
+      try {
+        var t = localStorage.getItem("sorti_theme");
+        if (t !== "light" && t !== "dark") {
+          t = window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+        }
+        document.documentElement.setAttribute("data-theme", t);
+      } catch (e) { document.documentElement.setAttribute("data-theme", "light"); }
+    })();
+  </script>
 
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
 
-  <link rel="stylesheet" href="./app.css?v=101">
+  <link rel="stylesheet" href="./app.css?v=200">
 </head>
 
 <body>
-  <div class="wrap">
-    <div class="top">
+  <!-- Icone riutilizzabili -->
+  <svg width="0" height="0" style="position:absolute" aria-hidden="true">
+    <defs>
+      <linearGradient id="sortiGrad" x1="0" y1="0" x2="1" y2="1">
+        <stop offset="0" stop-color="#43cea2" />
+        <stop offset="1" stop-color="#185a9d" />
+      </linearGradient>
+    </defs>
+    <symbol id="i-scale" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" d="M12 3v3M5 7h14M7 7l-3 7a3.5 3.5 0 0 0 6 0L7 7Zm10 0-3 7a3.5 3.5 0 0 0 6 0l-3-7ZM12 6v14M8 20h8"/></symbol>
+    <symbol id="i-leaf" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" d="M5 19c0-8 5-13 15-14-1 10-6 15-14 15M5 19c3-4 6-6.5 10-8.5"/></symbol>
+    <symbol id="i-stack" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" d="m12 3 9 5-9 5-9-5 9-5Zm-9 9 9 5 9-5M3 16l9 5 9-5"/></symbol>
+    <symbol id="i-globe" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" d="M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18Zm-9-9h18M12 3c2.5 2.5 3.5 5.5 3.5 9s-1 6.5-3.5 9c-2.5-2.5-3.5-5.5-3.5-9s1-6.5 3.5-9Z"/></symbol>
+    <symbol id="i-gear" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" d="M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6Z"/><path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1Z"/></symbol>
+    <symbol id="i-sun" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" d="M12 16a4 4 0 1 0 0-8 4 4 0 0 0 0 8Zm0-14v2m0 16v2M4.9 4.9l1.4 1.4m11.4 11.4 1.4 1.4M2 12h2m16 0h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></symbol>
+    <symbol id="i-moon" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8Z"/></symbol>
+    <symbol id="i-x" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" d="M6 6l12 12M18 6 6 18"/></symbol>
+    <symbol id="i-download" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" d="M12 3v12m0 0-4-4m4 4 4-4M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2"/></symbol>
+    <symbol id="i-sliders" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" d="M4 6h10m4 0h2M4 12h4m4 0h8M4 18h12m4 0h0"/><circle cx="16" cy="6" r="2" fill="none" stroke="currentColor" stroke-width="1.8"/><circle cx="10" cy="12" r="2" fill="none" stroke="currentColor" stroke-width="1.8"/><circle cx="18" cy="18" r="2" fill="none" stroke="currentColor" stroke-width="1.8"/></symbol>
+    <symbol id="i-key" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" d="M15 9a3 3 0 1 1-6 0 3 3 0 0 1 6 0Zm-3 3v9m0-4h3m-3 2.5h2"/></symbol>
+  </svg>
+
+  <header class="appbar">
+    <div class="appbarInner">
       <div class="brand">
-        <div class="logo" aria-hidden="true"></div>
-        <div>
-          <h1>Sorti SmartBin</h1>
-          <div class="sub">Dashboard real-time: eventi, CO₂, riempimento e alert operativi.</div>
+        <svg class="logo" viewBox="0 0 40 40" aria-hidden="true">
+          <rect width="40" height="40" rx="11" fill="url(#sortiGrad)" />
+          <rect x="9.5" y="19" width="5.5" height="12" rx="2.75" fill="#fff" fill-opacity=".55" />
+          <rect x="17.25" y="12" width="5.5" height="19" rx="2.75" fill="#fff" />
+          <rect x="25" y="15.5" width="5.5" height="15.5" rx="2.75" fill="#fff" fill-opacity=".8" />
+        </svg>
+        <div class="brandText">
+          <span class="wordmark">sorti</span>
+          <span class="product">SmartBin Console</span>
         </div>
       </div>
 
       <div class="headerRight">
-        <div class="pill">
+        <div class="statusPill" title="Stato connessione">
           <span id="connDot" class="dot"></span>
           <span id="liveText">Live</span>
         </div>
-        <div class="pill">
-          <span class="muted">Aggiornato:</span>
-          <b id="lastUpdated">—</b>
+        <div class="updated">
+          <span class="muted">Aggiornato</span>
+          <b id="lastUpdated" class="num">—</b>
         </div>
+        <button class="iconBtn" id="btnTheme" title="Cambia tema" aria-label="Cambia tema">
+          <svg class="ico themeSun"><use href="#i-sun" /></svg>
+          <svg class="ico themeMoon"><use href="#i-moon" /></svg>
+        </button>
+        <button class="iconBtn" id="btnSettings" title="Impostazioni e export" aria-label="Impostazioni">
+          <svg class="ico"><use href="#i-gear" /></svg>
+          <span id="keyDot" class="keyDot" aria-hidden="true"></span>
+        </button>
       </div>
     </div>
+  </header>
 
-    <div class="grid">
-      <div class="card">
-        <div class="cardHeader">
-          <div class="title">Overview</div>
-          <div class="row" style="align-items:center">
-            <span class="muted small">Range</span>
-            <select id="rangeSel">
-              <option value="7">7 giorni</option>
-              <option value="30" selected>30 giorni</option>
-              <option value="90">90 giorni</option>
-              <option value="365">365 giorni</option>
-            </select>
-          </div>
-        </div>
-
-        <div class="kpiRow">
-          <div class="kpi">
-            <div class="label">Peso (range)</div>
-            <div id="kpiRangeWeight" class="value">—</div>
-            <div class="hint">Somma nel range</div>
-          </div>
-          <div class="kpi">
-            <div class="label">CO₂ (range)</div>
-            <div id="kpiRangeCO2" class="value">—</div>
-            <div class="hint">Somma nel range</div>
-          </div>
-          <div class="kpi">
-            <div class="label">Peso (totale)</div>
-            <div id="kpiTotalWeight" class="value">—</div>
-            <div class="hint">Storico completo</div>
-          </div>
-          <div class="kpi">
-            <div class="label">CO₂ (totale)</div>
-            <div id="kpiTotalCO2" class="value">—</div>
-            <div class="hint">Storico completo</div>
-          </div>
-        </div>
-
-        <div class="sep"></div>
-
-        <div class="quick">
-          <div class="row" style="align-items:center">
-            <span class="title">Alert</span>
-            <span id="alertSummary" class="chip ok">0</span>
-            <span class="muted small">Warn ≥ <b id="warnLabel">70%</b></span>
-            <span class="muted small">Crit ≥ <b id="critLabel">85%</b></span>
-            <span class="muted small">Cestini: <b id="binsCount">—</b></span>
-          </div>
-          <div class="row" style="align-items:center">
-            <label class="toggle" title="Mostra solo bins in warning/critical">
-              <input type="checkbox" id="onlyAlerts">
-              Solo alert
-            </label>
-            <button class="btnGhost btnMini" id="btnEditThresholds">Soglie</button>
-          </div>
-        </div>
-
-        <div id="alertsList" class="emptyState" style="display:none"></div>
-        <div id="errBox" class="errBox"></div>
+  <main class="wrap">
+    <section class="pageHead">
+      <div>
+        <h1>Panoramica</h1>
+        <p class="sub">Raccolta differenziata, CO₂ risparmiata e stato di riempimento in tempo reale.</p>
       </div>
+      <label class="field">
+        <span class="fieldLabel">Periodo</span>
+        <select id="rangeSel">
+          <option value="7">Ultimi 7 giorni</option>
+          <option value="30" selected>Ultimi 30 giorni</option>
+          <option value="90">Ultimi 90 giorni</option>
+          <option value="365">Ultimi 365 giorni</option>
+        </select>
+      </label>
+    </section>
 
-      <div class="card">
-        <div class="cardHeader">
-          <div class="title">Tools</div>
-          <div class="small muted">admin ≠ ingest</div>
+    <section class="kpiGrid">
+      <div class="kpi kpiHero">
+        <div class="kpiTop">
+          <span class="label">CO₂ risparmiata</span>
+          <span class="kpiIcon"><svg class="ico"><use href="#i-leaf" /></svg></span>
         </div>
-
-        <div class="row" style="margin-bottom:10px">
-          <input id="adminKeyInput" type="password" placeholder="ADMIN key (X-API-Key)" style="flex:1 1 240px" />
-          <button class="btnPrimary" id="btnSaveAdmin">Salva</button>
-        </div>
-
-        <div class="row" style="margin-bottom:10px">
-          <input id="ingestKeyInput" type="password" placeholder="INGEST key (X-Ingest-Key)" style="flex:1 1 240px" />
-          <button class="btnPrimary" id="btnSaveIngest">Salva</button>
-        </div>
-
-        <div class="sep"></div>
-
-        <div class="row">
-          <button id="btnExportEvents">Export eventi CSV</button>
-        </div>
-
-        <div class="row" style="margin-top:10px; align-items:center">
-          <span class="muted small">Daily:</span>
-          <input id="exportDays" type="number" min="1" max="365" value="30" style="width:120px" />
-          <button id="btnExportDaily">Export CSV</button>
-        </div>
+        <div id="kpiRangeCO2" class="value num">—</div>
+        <div class="hint"><span class="rangeHint">Ultimi 30 giorni</span></div>
       </div>
-    </div>
+      <div class="kpi">
+        <div class="kpiTop">
+          <span class="label">Rifiuti raccolti</span>
+          <span class="kpiIcon"><svg class="ico"><use href="#i-scale" /></svg></span>
+        </div>
+        <div id="kpiRangeWeight" class="value num">—</div>
+        <div class="hint"><span class="rangeHint">Ultimi 30 giorni</span></div>
+      </div>
+      <div class="kpi">
+        <div class="kpiTop">
+          <span class="label">CO₂ totale</span>
+          <span class="kpiIcon"><svg class="ico"><use href="#i-globe" /></svg></span>
+        </div>
+        <div id="kpiTotalCO2" class="value num">—</div>
+        <div class="hint">Storico completo</div>
+      </div>
+      <div class="kpi">
+        <div class="kpiTop">
+          <span class="label">Totale raccolto</span>
+          <span class="kpiIcon"><svg class="ico"><use href="#i-stack" /></svg></span>
+        </div>
+        <div id="kpiTotalWeight" class="value num">—</div>
+        <div class="hint">Storico completo</div>
+      </div>
+    </section>
 
-    <div class="card" style="margin-top:16px">
+    <div id="errBox" class="errBox"></div>
+
+    <section class="card">
       <div class="cardHeader">
-        <div class="title">Bins</div>
-        <div class="small muted">tap/click su un bin per dettagli</div>
+        <div>
+          <h2 class="title">Cestini</h2>
+          <div class="cardSub">
+            <b id="binsCount" class="num">—</b> cestini ·
+            <span id="alertSummary" class="chip ok">Tutto regolare</span>
+          </div>
+        </div>
+        <div class="cardActions">
+          <label class="switch" title="Mostra solo cestini in attenzione o critici">
+            <input type="checkbox" id="onlyAlerts">
+            <span class="switchTrack"><span class="switchThumb"></span></span>
+            Solo alert
+          </label>
+          <button class="btn btnGhost btnSm" id="btnEditThresholds" title="Modifica soglie">
+            <svg class="ico"><use href="#i-sliders" /></svg>
+            <span>Soglie <span class="thrInline"><span class="tDot warn"></span><b id="warnLabel">70%</b> <span class="tDot crit"></span><b id="critLabel">85%</b></span></span>
+          </button>
+        </div>
       </div>
+
+      <div id="alertsList" class="alertsList" style="display:none"></div>
 
       <div class="tableWrap onlyDesktop">
-        <table>
+        <table class="binsTable">
           <thead>
             <tr>
-              <th>Bin</th>
-              <th>Peso</th>
-              <th>Capacità</th>
+              <th>Cestino</th>
               <th>Riempimento</th>
-              <th>Ultimo update</th>
+              <th>Scomparti</th>
+              <th>Peso / Capacità</th>
+              <th class="right">Ultimo segnale</th>
             </tr>
           </thead>
           <tbody id="binsBody"></tbody>
@@ -151,12 +180,38 @@
       </div>
 
       <div id="binsCards" class="cardsGrid onlyMobile"></div>
-    </div>
+    </section>
 
-    <div class="card" style="margin-top:16px">
+    <section class="insights">
+      <div class="card">
+        <div class="cardHeader">
+          <div>
+            <h2 class="title">CO₂ risparmiata nel tempo</h2>
+            <div class="cardSub"><span class="rangeHint">Ultimi 30 giorni</span> · valori giornalieri</div>
+          </div>
+        </div>
+        <div class="canvasWrap"><canvas id="co2Line"></canvas></div>
+        <div id="lineEmpty" class="emptyState" style="display:none">Nessun dato nel periodo selezionato.</div>
+      </div>
+
+      <div class="card">
+        <div class="cardHeader">
+          <div>
+            <h2 class="title">Materiali</h2>
+            <div class="cardSub">Peso per frazione</div>
+          </div>
+        </div>
+        <div class="canvasWrap"><canvas id="matPie"></canvas></div>
+        <div id="pieEmpty" class="emptyState" style="display:none">Nessun dato sui materiali (ancora nessun conferimento).</div>
+      </div>
+    </section>
+
+    <section class="card">
       <div class="cardHeader">
-        <div class="title">Recent events (admin)</div>
-        <div class="small muted">visibili solo con admin key valida</div>
+        <div>
+          <h2 class="title">Conferimenti recenti</h2>
+          <div class="cardSub">Ultimi eventi registrati · richiede Admin key</div>
+        </div>
       </div>
 
       <div id="eventsEmpty" class="emptyState" style="display:none"></div>
@@ -166,140 +221,179 @@
           <thead>
             <tr>
               <th>Quando</th>
-              <th>Bin</th>
+              <th>Cestino</th>
               <th>Materiale</th>
-              <th>Peso</th>
-              <th>CO₂</th>
-              <th style="text-align:right">event_id</th>
+              <th class="right">Peso</th>
+              <th class="right">CO₂</th>
+              <th class="right">ID evento</th>
             </tr>
           </thead>
           <tbody id="eventsBody"></tbody>
         </table>
       </div>
-    </div>
+    </section>
 
-    <div class="insights">
-      <div class="card">
-        <div class="cardHeader">
-          <div class="title">CO₂ over time</div>
-          <div class="small muted">range selezionato</div>
-        </div>
-        <div class="canvasWrap"><canvas id="co2Line"></canvas></div>
-        <div id="lineEmpty" class="emptyState" style="display:none">Nessun dato nel range selezionato.</div>
-      </div>
+    <footer class="foot">
+      <span class="wordmark small">sorti</span>
+      <span class="muted">SmartBin Console</span>
+    </footer>
+  </main>
 
-      <div class="card">
-        <div class="cardHeader">
-          <div class="title">Materials breakdown</div>
-          <div class="small muted">peso totale</div>
-        </div>
-        <div class="canvasWrap"><canvas id="matPie"></canvas></div>
-        <div id="pieEmpty" class="emptyState" style="display:none">Nessun dato materiali (ancora nessun evento).</div>
-      </div>
-    </div>
-  </div>
-
+  <!-- Dettaglio cestino -->
   <div id="drawerOverlay" class="drawerOverlay" aria-hidden="true"></div>
 
   <aside id="drawer" class="drawer" aria-hidden="true">
     <div class="drawerTop">
-      <div>
-        <div class="drawerTitle" id="ddTitle">Bin —</div>
-        <div class="drawerSub muted" id="ddSub">—</div>
+      <div class="drawerHead">
+        <div id="ddGlyph" class="binGlyph lg"><div class="binGlyphFill"></div></div>
+        <div>
+          <div class="drawerTitle" id="ddTitle">Cestino —</div>
+          <div class="drawerSub" id="ddSub">—</div>
+        </div>
       </div>
-      <button class="btnGhost btnMini" id="btnCloseDrawer">Chiudi</button>
+      <button class="iconBtn" id="btnCloseDrawer" aria-label="Chiudi"><svg class="ico"><use href="#i-x" /></svg></button>
     </div>
 
     <div class="drawerBody">
       <div class="ddKpis">
         <div class="kpi kpiTight">
-          <div class="label">Riempimento totale</div>
-          <div id="ddFill" class="value">—</div>
+          <span class="label">Riempimento</span>
+          <div id="ddFill" class="value num">—</div>
           <div id="ddFillHint" class="hint">—</div>
         </div>
         <div class="kpi kpiTight">
-          <div class="label">Peso attuale</div>
-          <div id="ddWeight" class="value">—</div>
-          <div class="hint">nel bin</div>
+          <span class="label">Peso attuale</span>
+          <div id="ddWeight" class="value num">—</div>
+          <div class="hint">nel cestino</div>
         </div>
         <div class="kpi kpiTight">
-          <div class="label">Capacità</div>
-          <div id="ddCap" class="value">—</div>
+          <span class="label">Capacità</span>
+          <div id="ddCap" class="value num">—</div>
           <div class="hint">configurata</div>
         </div>
         <div class="kpi kpiTight">
-          <div class="label">Ultimo update</div>
+          <span class="label">Ultimo segnale</span>
           <div id="ddLast" class="value">—</div>
-          <div class="hint">—</div>
+          <div class="hint">dal dispositivo</div>
         </div>
       </div>
 
-      <div class="sep"></div>
-
-      <div class="cardHeader" style="padding:0; margin:0 0 8px">
-        <div class="title">Scomparti</div>
-        <div class="small muted">livello misurato dai sensori</div>
+      <div class="ddSection">
+        <div class="ddSectionHead">
+          <h3 class="title">Scomparti</h3>
+          <span class="cardSub">livello misurato dai sensori</span>
+        </div>
+        <div id="ddCompartmentsEmpty" class="emptyState" style="display:none"></div>
+        <div id="ddCompartmentsBody" class="compGrid"></div>
       </div>
-      <div id="ddCompartmentsEmpty" class="emptyState" style="display:none"></div>
-      <div id="ddCompartmentsBody" class="compGrid"></div>
 
-      <div class="sep"></div>
-
-      <div class="cardHeader" style="padding:0; margin:0 0 8px">
-        <div class="title">CO₂ (bin) nel range</div>
-        <div class="small muted"><span id="ddRangeLabel">—</span></div>
+      <div class="ddSection">
+        <div class="ddSectionHead">
+          <h3 class="title">CO₂ risparmiata</h3>
+          <span class="cardSub" id="ddRangeLabel">—</span>
+        </div>
+        <div class="canvasWrap ddCanvas"><canvas id="ddLine"></canvas></div>
+        <div id="ddLineEmpty" class="emptyState" style="display:none">Nessun dato nel periodo selezionato.</div>
       </div>
-      <div class="canvasWrap ddCanvas"><canvas id="ddLine"></canvas></div>
-      <div id="ddLineEmpty" class="emptyState" style="display:none">Nessun dato nel range selezionato.</div>
 
-      <div class="sep"></div>
-
-      <div class="cardHeader" style="padding:0; margin:0 0 8px">
-        <div class="title">Materiali (bin) nel range</div>
-        <div class="small muted">peso totale</div>
+      <div class="ddSection">
+        <div class="ddSectionHead">
+          <h3 class="title">Materiali</h3>
+          <span class="cardSub">peso per frazione</span>
+        </div>
+        <div class="canvasWrap ddCanvas"><canvas id="ddPie"></canvas></div>
+        <div id="ddPieEmpty" class="emptyState" style="display:none">Nessun dato sui materiali.</div>
       </div>
-      <div class="canvasWrap ddCanvas"><canvas id="ddPie"></canvas></div>
-      <div id="ddPieEmpty" class="emptyState" style="display:none">Nessun dato materiali.</div>
 
-      <div class="sep"></div>
-
-      <div class="cardHeader" style="padding:0; margin:0 0 8px">
-        <div class="title">Ultimi eventi (bin)</div>
-        <div class="small muted">richiede admin key valida</div>
-      </div>
-      <div id="ddEventsEmpty" class="emptyState" style="display:none"></div>
-      <div class="tableWrap">
-        <table class="eventsTable">
-          <thead>
-            <tr>
-              <th>Quando</th>
-              <th>Materiale</th>
-              <th>Peso</th>
-              <th>CO₂</th>
-              <th style="text-align:right">event_id</th>
-            </tr>
-          </thead>
-          <tbody id="ddEventsBody"></tbody>
-        </table>
+      <div class="ddSection">
+        <div class="ddSectionHead">
+          <h3 class="title">Ultimi conferimenti</h3>
+          <span class="cardSub">richiede Admin key</span>
+        </div>
+        <div id="ddEventsEmpty" class="emptyState" style="display:none"></div>
+        <div class="tableWrap">
+          <table class="eventsTable">
+            <thead>
+              <tr>
+                <th>Quando</th>
+                <th>Materiale</th>
+                <th class="right">Peso</th>
+                <th class="right">CO₂</th>
+                <th class="right">ID evento</th>
+              </tr>
+            </thead>
+            <tbody id="ddEventsBody"></tbody>
+          </table>
+        </div>
       </div>
     </div>
   </aside>
 
+  <!-- Impostazioni -->
+  <dialog id="settingsModal" class="customModal settingsModal">
+    <div class="modalHeader">
+      <div>
+        <div class="title">Impostazioni</div>
+        <div class="cardSub">Chiavi di accesso ed export dati</div>
+      </div>
+      <button id="settingsClose" class="iconBtn" aria-label="Chiudi"><svg class="ico"><use href="#i-x" /></svg></button>
+    </div>
+
+    <div class="setGroup">
+      <div class="setLabel">
+        <svg class="ico"><use href="#i-key" /></svg> Admin key
+        <span id="adminKeyStatus" class="keyStatus">—</span>
+      </div>
+      <div class="setHelp">Abilita eventi recenti ed export (header X-API-Key).</div>
+      <div class="inputRow">
+        <input id="adminKeyInput" type="password" placeholder="Incolla la Admin key" autocomplete="off" />
+        <button class="btn btnPrimary" id="btnSaveAdmin">Salva</button>
+      </div>
+    </div>
+
+    <div class="setGroup">
+      <div class="setLabel">
+        <svg class="ico"><use href="#i-key" /></svg> Ingest key
+        <span id="ingestKeyStatus" class="keyStatus">—</span>
+      </div>
+      <div class="setHelp">Usata per l'invio di eventi (header X-Ingest-Key).</div>
+      <div class="inputRow">
+        <input id="ingestKeyInput" type="password" placeholder="Incolla la Ingest key" autocomplete="off" />
+        <button class="btn btnPrimary" id="btnSaveIngest">Salva</button>
+      </div>
+    </div>
+
+    <div class="setGroup">
+      <div class="setLabel"><svg class="ico"><use href="#i-download" /></svg> Export CSV</div>
+      <div class="exportRow">
+        <button class="btn" id="btnExportEvents"><svg class="ico"><use href="#i-download" /></svg> Tutti gli eventi</button>
+      </div>
+      <div class="exportRow">
+        <button class="btn" id="btnExportDaily"><svg class="ico"><use href="#i-download" /></svg> Riepilogo giornaliero</button>
+        <span class="muted small">ultimi</span>
+        <input id="exportDays" type="number" min="1" max="365" value="30" class="daysInput" />
+        <span class="muted small">giorni</span>
+      </div>
+    </div>
+  </dialog>
+
+  <!-- Modale generica (alert / prompt) -->
   <dialog id="customModal" class="customModal">
     <div class="modalHeader">
       <div id="modalTitle" class="title">Avviso</div>
-      <button id="modalCloseX" class="btnGhost btnMini" style="padding:4px 8px" aria-label="Chiudi">&times;</button>
+      <button id="modalCloseX" class="iconBtn" aria-label="Chiudi"><svg class="ico"><use href="#i-x" /></svg></button>
     </div>
     <div id="modalMessage" class="modalMessage"></div>
     <input type="text" id="modalInput" placeholder="Scrivi qui..." />
     <div class="modalActions">
-      <button id="modalBtnCancel" class="btnGhost">Annulla</button>
-      <button id="modalBtnOk" class="btnPrimary">Conferma</button>
+      <button id="modalBtnCancel" class="btn btnGhost">Annulla</button>
+      <button id="modalBtnOk" class="btn btnPrimary">Conferma</button>
     </div>
   </dialog>
+
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-  <script src="./config.js?v=101"></script>
-  <script src="./app.js?v=101"></script>
+  <script src="./config.js?v=200"></script>
+  <script src="./app.js?v=200"></script>
 </body>
 
 </html>
