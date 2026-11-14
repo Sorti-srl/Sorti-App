@@ -25,7 +25,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
 
-  <link rel="stylesheet" href="./app.css?v=200">
+  <link rel="stylesheet" href="./app.css?v=220">
 </head>
 
 <body>
@@ -47,6 +47,7 @@
     <symbol id="i-x" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" d="M6 6l12 12M18 6 6 18"/></symbol>
     <symbol id="i-download" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" d="M12 3v12m0 0-4-4m4 4 4-4M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2"/></symbol>
     <symbol id="i-sliders" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" d="M4 6h10m4 0h2M4 12h4m4 0h8M4 18h12m4 0h0"/><circle cx="16" cy="6" r="2" fill="none" stroke="currentColor" stroke-width="1.8"/><circle cx="10" cy="12" r="2" fill="none" stroke="currentColor" stroke-width="1.8"/><circle cx="18" cy="18" r="2" fill="none" stroke="currentColor" stroke-width="1.8"/></symbol>
+    <symbol id="i-report" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8l-5-5Zm0 0v5h5M9 17v-3m3 3v-6m3 6v-4"/></symbol>
     <symbol id="i-key" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" d="M15 9a3 3 0 1 1-6 0 3 3 0 0 1 6 0Zm-3 3v9m0-4h3m-3 2.5h2"/></symbol>
   </svg>
 
@@ -92,6 +93,7 @@
         <h1>Panoramica</h1>
         <p class="sub">Raccolta differenziata, CO₂ risparmiata e stato di riempimento in tempo reale.</p>
       </div>
+      <div class="pageActions">
       <label class="field">
         <span class="fieldLabel">Periodo</span>
         <select id="rangeSel">
@@ -101,6 +103,10 @@
           <option value="365">Ultimi 365 giorni</option>
         </select>
       </label>
+      <button class="btn btnPrimary" data-esg-report title="Scarica il report ESG in Excel per il periodo selezionato">
+        <svg class="ico"><use href="#i-report" /></svg><span>Report ESG</span>
+      </button>
+      </div>
     </section>
 
     <section class="kpiGrid">
@@ -109,7 +115,7 @@
           <span class="label">CO₂ risparmiata</span>
           <span class="kpiIcon"><svg class="ico"><use href="#i-leaf" /></svg></span>
         </div>
-        <div id="kpiRangeCO2" class="value num">—</div>
+        <div id="kpiRangeCO2" class="value num skeleton">—</div>
         <div class="hint"><span class="rangeHint">Ultimi 30 giorni</span></div>
       </div>
       <div class="kpi">
@@ -117,7 +123,7 @@
           <span class="label">Rifiuti raccolti</span>
           <span class="kpiIcon"><svg class="ico"><use href="#i-scale" /></svg></span>
         </div>
-        <div id="kpiRangeWeight" class="value num">—</div>
+        <div id="kpiRangeWeight" class="value num skeleton">—</div>
         <div class="hint"><span class="rangeHint">Ultimi 30 giorni</span></div>
       </div>
       <div class="kpi">
@@ -125,7 +131,7 @@
           <span class="label">CO₂ totale</span>
           <span class="kpiIcon"><svg class="ico"><use href="#i-globe" /></svg></span>
         </div>
-        <div id="kpiTotalCO2" class="value num">—</div>
+        <div id="kpiTotalCO2" class="value num skeleton">—</div>
         <div class="hint">Storico completo</div>
       </div>
       <div class="kpi">
@@ -133,7 +139,7 @@
           <span class="label">Totale raccolto</span>
           <span class="kpiIcon"><svg class="ico"><use href="#i-stack" /></svg></span>
         </div>
-        <div id="kpiTotalWeight" class="value num">—</div>
+        <div id="kpiTotalWeight" class="value num skeleton">—</div>
         <div class="hint">Storico completo</div>
       </div>
     </section>
@@ -146,6 +152,7 @@
           <h2 class="title">Cestini</h2>
           <div class="cardSub">
             <b id="binsCount" class="num">—</b> cestini ·
+            <span id="activitySummary" class="act idle"><span class="actDot"></span>—</span> ·
             <span id="alertSummary" class="chip ok">Tutto regolare</span>
           </div>
         </div>
@@ -172,7 +179,7 @@
               <th>Riempimento</th>
               <th>Scomparti</th>
               <th>Peso / Capacità</th>
-              <th class="right">Ultimo segnale</th>
+              <th class="right">Attività</th>
             </tr>
           </thead>
           <tbody id="binsBody"></tbody>
@@ -238,6 +245,8 @@
       <span class="muted">SmartBin Console</span>
     </footer>
   </main>
+
+  <div id="toasts" class="toasts" aria-live="polite"></div>
 
   <!-- Dettaglio cestino -->
   <div id="drawerOverlay" class="drawerOverlay" aria-hidden="true"></div>
@@ -364,7 +373,15 @@
     </div>
 
     <div class="setGroup">
-      <div class="setLabel"><svg class="ico"><use href="#i-download" /></svg> Export CSV</div>
+      <div class="setLabel"><svg class="ico"><use href="#i-report" /></svg> Report ESG (Excel)</div>
+      <div class="setHelp">Report con logo Sorti, allineato a GRI 306 ed ESRS E5, per il periodo selezionato in dashboard.</div>
+      <div class="exportRow" style="margin-left:24px">
+        <button class="btn btnPrimary" data-esg-report><svg class="ico"><use href="#i-report" /></svg><span>Scarica report ESG</span></button>
+      </div>
+    </div>
+
+    <div class="setGroup">
+      <div class="setLabel"><svg class="ico"><use href="#i-download" /></svg> Export dati grezzi (CSV)</div>
       <div class="exportRow">
         <button class="btn" id="btnExportEvents"><svg class="ico"><use href="#i-download" /></svg> Tutti gli eventi</button>
       </div>
@@ -392,8 +409,9 @@
   </dialog>
 
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-  <script src="./config.js?v=200"></script>
-  <script src="./app.js?v=200"></script>
+  <script src="./config.js?v=220"></script>
+  <script src="./app.js?v=220"></script>
+  <script src="./report.js?v=220"></script>
 </body>
 
 </html>
