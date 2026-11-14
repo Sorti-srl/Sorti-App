@@ -4,11 +4,16 @@
 
 :root{
   /* Brand */
-  --brand-a:#43cea2;
-  --brand-b:#185a9d;
-  --brand:#14a37f;
-  --brand-ink:#0d7a60;
-  --brand-grad: linear-gradient(135deg, var(--brand-a) 0%, var(--brand-b) 100%);
+  /* Brand Sorti ufficiale: blu notte + verde lime */
+  --navy:#09182F;
+  --navy-2:#132a4d;
+  --lime:#7EDA55;
+  --brand:#4cb82e;
+  --brand-ink:#2f7d17;
+  --brand-grad: linear-gradient(90deg, #7EDA55 0%, #4cb82e 100%);
+  --primary-bg: var(--navy);
+  --primary-fg: #ffffff;
+  --hero-bg: linear-gradient(135deg, #132a4d 0%, #09182F 70%);
 
   /* Status */
   --ok:#16a34a;
@@ -49,8 +54,11 @@
 }
 
 [data-theme="dark"]{
-  --brand:#3fd1a6;
-  --brand-ink:#5fe0b8;
+  --brand:#7EDA55;
+  --brand-ink:#8fe36a;
+  --primary-bg: var(--lime);
+  --primary-fg: var(--navy);
+  --hero-bg: linear-gradient(135deg, #16305a 0%, #0b1d38 70%);
 
   --ok:#34d27b;
   --warn:#f5bf2c;
@@ -122,7 +130,12 @@ h1,h2,h3{ margin:0; }
   display:flex; align-items:center; justify-content:space-between; gap:16px;
 }
 .brand{ display:flex; align-items:center; gap:12px; }
-.logo{ width:36px; height:36px; display:block; filter: drop-shadow(0 4px 10px rgba(24,90,157,.25)); }
+.logoImg{
+  height:36px; width:auto; display:block;
+  border-radius:9px;
+  box-shadow: 0 4px 14px -4px rgba(9,24,47,.45), inset 0 0 0 1px rgba(255,255,255,.06);
+}
+.logoImg.sm{ height:24px; border-radius:6px; box-shadow:none; }
 .brandText{ display:flex; flex-direction:column; line-height:1.1; }
 .wordmark{
   font-weight:800; font-size:20px; letter-spacing:-.6px;
@@ -172,8 +185,10 @@ h1,h2,h3{ margin:0; }
 .iconBtn:hover{ background:var(--surface-3); color:var(--text); }
 .iconBtn:focus-visible, .btn:focus-visible{ outline:2px solid var(--brand); outline-offset:2px; }
 .themeMoon{ display:none; }
-[data-theme="dark"] .themeSun{ display:none; }
+.themeGlass{ display:none; }
+[data-theme="dark"] .themeSun, [data-theme="glass"] .themeSun{ display:none; }
 [data-theme="dark"] .themeMoon{ display:inline-block; }
+[data-theme="glass"] .themeGlass{ display:inline-block; }
 .keyDot{
   position:absolute; top:6px; right:6px;
   width:7px; height:7px; border-radius:999px;
@@ -189,7 +204,7 @@ h1,h2,h3{ margin:0; }
 }
 
 /* ---------- Layout ---------- */
-.wrap{ max-width:1240px; margin:0 auto; padding:28px 20px 40px; }
+.wrap{ max-width:1240px; margin:0 auto; padding:28px 20px 120px; }
 @media (max-width:640px){ .wrap{ padding:20px 14px 32px; } }
 
 .pageHead{
@@ -243,13 +258,15 @@ input::placeholder{ color:var(--muted-2); }
 }
 .btn:hover{ background:var(--surface-3); }
 .btn:active{ transform: translateY(1px); }
-.btnPrimary{
-  background: var(--brand-grad);
+.btn.btnPrimary, button.btn.btnPrimary{
+  background: var(--primary-bg);
   border-color: transparent;
-  color:#fff;
-  box-shadow: 0 4px 14px -4px rgba(24,90,157,.45);
+  color: var(--primary-fg);
+  box-shadow: 0 4px 14px -4px rgba(9,24,47,.45);
 }
-.btnPrimary:hover{ background: var(--brand-grad); filter: brightness(1.06); }
+.btnPrimary .ico{ color: var(--lime); }
+[data-theme="dark"] .btnPrimary .ico{ color: var(--navy); }
+.btn.btnPrimary:hover{ background: var(--primary-bg); filter: brightness(1.12); }
 .btnGhost{ background:transparent; }
 .btnSm{ height:34px; padding:0 12px; font-size:12.5px; }
 
@@ -314,24 +331,25 @@ input::placeholder{ color:var(--muted-2); }
 }
 .kpiHero{
   position:relative; overflow:hidden;
-  background: var(--brand-grad);
+  background: var(--hero-bg);
   border-color: transparent;
   color:#fff;
-  box-shadow: 0 12px 30px -12px rgba(24,90,157,.55);
+  box-shadow: 0 14px 34px -14px rgba(9,24,47,.7);
 }
+.kpiHero .value{ color: var(--lime); }
 .kpiHero::after{
   /* motivo a "scomparti" — elemento distintivo */
   content:""; position:absolute; right:-6px; bottom:-10px; width:120px; height:80px;
   background:
-    linear-gradient(#fff,#fff) 0 100%/18px 45% no-repeat,
-    linear-gradient(#fff,#fff) 26px 100%/18px 80% no-repeat,
-    linear-gradient(#fff,#fff) 52px 100%/18px 60% no-repeat,
-    linear-gradient(#fff,#fff) 78px 100%/18px 95% no-repeat;
-  opacity:.12; border-radius:6px;
+    linear-gradient(var(--lime),var(--lime)) 0 100%/18px 45% no-repeat,
+    linear-gradient(var(--lime),var(--lime)) 26px 100%/18px 80% no-repeat,
+    linear-gradient(var(--lime),var(--lime)) 52px 100%/18px 60% no-repeat,
+    linear-gradient(var(--lime),var(--lime)) 78px 100%/18px 95% no-repeat;
+  opacity:.16; border-radius:6px;
 }
-.kpiHero .label{ color: rgba(255,255,255,.88); }
-.kpiHero .hint{ color: rgba(255,255,255,.78); }
-.kpiHero .kpiIcon{ background: rgba(255,255,255,.18); color:#fff; }
+.kpiHero .label{ color: rgba(255,255,255,.9); }
+.kpiHero .hint{ color: rgba(255,255,255,.7); }
+.kpiHero .kpiIcon{ background: rgba(126,218,85,.16); color: var(--lime); }
 
 /* ---------- Card ---------- */
 .card{
@@ -756,8 +774,8 @@ tbody tr:last-child td{ border-bottom:none; }
 /* Evidenziazione: nuovo conferimento / nuovo cestino */
 .binsTable tbody tr.isEvent td{ animation: flashEvent 2.4s ease-out; }
 .binsTable tbody tr.isNew td{ animation: flashNew 3.2s ease-out; }
-.binCard.isEvent{ animation: flashEventCard 2.4s ease-out; }
-.binCard.isNew{ animation: flashNewCard 3.2s ease-out; }
+.binCard.isEvent, .binTile.isEvent{ animation: flashEventCard 2.4s ease-out; }
+.binCard.isNew, .binTile.isNew{ animation: flashNewCard 3.2s ease-out; }
 @keyframes flashEvent{ 0%,25%{ background: color-mix(in srgb, var(--brand) 14%, transparent); } 100%{ background: transparent; } }
 @keyframes flashNew{
   0%{ background: color-mix(in srgb, var(--brand) 22%, transparent); }
@@ -785,7 +803,7 @@ tbody tr:last-child td{ border-bottom:none; }
 
 /* Toast */
 .toasts{
-  position:fixed; right:20px; bottom:20px; z-index:80;
+  position:fixed; right:20px; bottom:96px; z-index:80;
   display:flex; flex-direction:column; gap:8px;
   width:min(340px, calc(100vw - 32px));
   pointer-events:none;
@@ -822,15 +840,15 @@ tbody tr:last-child td{ border-bottom:none; }
 .toastIcon::after{
   content:""; position:absolute; left:9px; top:8px; width:16px; height:2px; border-radius:2px; background:var(--tc);
 }
-.toast.new .toastIcon{ background: var(--brand-grad); }
-.toast.new .toastIcon::before{ border-color:#fff; }
-.toast.new .toastIcon::after{ background:#fff; }
+.toast.new .toastIcon{ background: var(--navy); --tc: var(--lime); }
+.toast.new .toastIcon::before{ border-color:var(--lime); }
+.toast.new .toastIcon::after{ background:var(--lime); }
 .toastTitle{ font-weight:800; font-size:13.5px; }
 .toastText{ font-size:12.5px; color:var(--muted); margin-top:1px; }
 @keyframes toastIn{ from{ opacity:0; transform: translateY(14px) scale(.96) } to{ opacity:1; transform:none } }
 @keyframes toastOut{ to{ opacity:0; transform: translateX(30px) } }
 @keyframes toastLife{ from{ transform:scaleX(1) } to{ transform:scaleX(0) } }
-@media (max-width:640px){ .toasts{ right:16px; left:16px; bottom:16px; width:auto; } }
+@media (max-width:640px){ .toasts{ right:16px; left:16px; bottom:88px; width:auto; } }
 
 /* Azioni intestazione pagina */
 .pageActions{ display:flex; align-items:flex-end; gap:10px; flex-wrap:wrap; }
@@ -838,3 +856,225 @@ tbody tr:last-child td{ border-bottom:none; }
 .btn.busy .ico{ animation: spin 1s linear infinite; }
 @keyframes spin{ to{ transform: rotate(360deg) } }
 @media (max-width:640px){ .pageActions{ width:100%; } .pageActions .field{ flex:1; } .pageActions select{ min-width:0; width:100%; } }
+
+
+/* =========================================================
+   Brand header
+   ========================================================= */
+.appbar::after{ background: linear-gradient(90deg, var(--lime), #4cb82e 40%, var(--navy)); opacity:1; }
+.product{ color:var(--text); font-size:12.5px; font-weight:800; letter-spacing:.4px; margin-top:0; }
+.productSub{ font-size:11.5px; color:var(--muted); font-weight:600; margin-top:2px; }
+.srOnly{ position:absolute; width:1px; height:1px; overflow:hidden; clip:rect(0 0 0 0); white-space:nowrap; }
+@media (max-width: 640px){ .productSub{ display:none; } .product{ display:block; } }
+@media (max-width: 420px){ .brandText{ display:none; } }
+
+/* =========================================================
+   Vista a schede (anello di riempimento)
+   ========================================================= */
+.seg{
+  display:inline-flex; padding:3px; gap:2px;
+  border-radius:10px; background:var(--surface-3); border:1px solid var(--border);
+}
+.segBtn{
+  width:32px; height:28px; border-radius:7px; border:0; padding:0;
+  display:inline-flex; align-items:center; justify-content:center;
+  background:transparent; color:var(--muted); cursor:pointer;
+}
+.segBtn .ico{ width:16px; height:16px; }
+.segBtn.active{ background:var(--surface); color:var(--text); box-shadow: var(--shadow-sm); }
+@media (max-width:820px){ .seg.onlyDesktop{ display:none !important; } }
+
+.tilesGrid{
+  display:grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap:14px;
+}
+@media (max-width:520px){ .tilesGrid{ grid-template-columns: 1fr 1fr; gap:10px; } }
+.binTile{
+  position:relative;
+  display:flex; flex-direction:column; align-items:center; text-align:center;
+  padding:14px 14px 16px;
+  border-radius:20px;
+  background:var(--surface-2);
+  border:1px solid var(--border);
+  cursor:pointer;
+  transition: transform .22s cubic-bezier(.2,.8,.2,1), box-shadow .22s, border-color .22s;
+  outline:none;
+}
+.binTile:hover, .binTile:focus-visible{ transform: translateY(-3px); box-shadow: var(--shadow); border-color: var(--border-strong); }
+.binTile:focus-visible{ outline:2px solid var(--brand); outline-offset:2px; }
+.binTile.priWarn{ border-color: color-mix(in srgb, var(--warn) 45%, var(--border)); }
+.binTile.priCritical{ border-color: color-mix(in srgb, var(--crit) 50%, var(--border)); }
+.tileTop{ width:100%; display:flex; align-items:center; justify-content:space-between; }
+.tileIcon{
+  width:34px; height:34px; border-radius:10px;
+  display:inline-flex; align-items:center; justify-content:center;
+  background:var(--surface);
+  border:1px solid var(--border);
+}
+.tileIcon .binGlyph{ width:14px; height:17px; margin-top:3px; border-width:1.5px; border-top-width:0; border-radius:2px 2px 4px 4px; }
+.tileIcon .binGlyph::before{ left:-3px; right:-3px; top:-3px; height:2px; }
+.tileIcon .binGlyph::after{ display:none; }
+.tileIcon .binGlyphFill{ left:1px; right:1px; bottom:1px; max-height: calc(100% - 2px); }
+
+.ring{ position:relative; width:128px; height:128px; margin:8px auto 10px; }
+.ring svg{ width:100%; height:100%; transform: rotate(-90deg); display:block; }
+.ring circle{ fill:none; stroke-width:9; }
+.ringTrack{ stroke:var(--track); }
+.ringVal{ stroke:var(--brand); stroke-linecap:round; transition: stroke-dashoffset 1s cubic-bezier(.2,.8,.2,1); }
+.ring.warn .ringVal{ stroke:var(--warn); }
+.ring.crit .ringVal{ stroke:var(--crit); }
+.ringCenter{ position:absolute; inset:0; display:flex; flex-direction:column; align-items:center; justify-content:center; }
+.ringPct{ font-size:26px; font-weight:800; letter-spacing:-.8px; line-height:1; font-variant-numeric: tabular-nums; }
+.ringLbl{ font-size:11px; color:var(--muted); margin-top:4px; font-weight:600; }
+.tileName{ font-weight:800; font-size:14px; letter-spacing:-.1px; max-width:100%; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.tileSub{ font-size:12.5px; color:var(--muted); margin-top:2px; font-variant-numeric: tabular-nums; }
+.tileSub b{ color:var(--text-2); }
+.tileComps{ margin-top:12px; min-height:30px; display:flex; align-items:flex-end; justify-content:center; }
+.tileComps .compCol{ width:14px; }
+.tileFoot{ margin-top:12px; padding-top:10px; border-top:1px solid var(--border); width:100%; display:flex; justify-content:center; }
+@media (max-width:520px){
+  .ring{ width:104px; height:104px; }
+  .ringPct{ font-size:21px; }
+  .binTile{ padding:12px 10px 14px; }
+}
+
+/* =========================================================
+   Dock di navigazione
+   ========================================================= */
+.dock{
+  position:fixed; left:50%; bottom:18px; transform:translateX(-50%);
+  z-index:45;
+  display:flex; align-items:center; gap:4px;
+  padding:6px;
+  border-radius:999px;
+  background: color-mix(in srgb, var(--surface) 78%, transparent);
+  backdrop-filter: blur(18px) saturate(1.5);
+  -webkit-backdrop-filter: blur(18px) saturate(1.5);
+  border:1px solid var(--border);
+  box-shadow: 0 18px 40px -16px rgba(9,24,47,.45);
+}
+.dockLink{
+  display:inline-flex; align-items:center; gap:7px;
+  height:40px; padding:0 14px;
+  border-radius:999px;
+  color:var(--text-2); text-decoration:none;
+  font-size:13px; font-weight:700;
+  transition: background .18s, color .18s;
+}
+.dockLink .ico{ width:17px; height:17px; }
+.dockLink:hover{ background:var(--surface-3); color:var(--text); }
+.dockLink.active{ background:var(--navy); color:#fff; }
+.dockLink.active .ico{ color:var(--lime); }
+[data-theme="dark"] .dockLink.active{ background:var(--lime); color:var(--navy); }
+[data-theme="dark"] .dockLink.active .ico{ color:var(--navy); }
+.dockAction{
+  width:40px; height:40px; border-radius:999px; border:0; margin-left:4px;
+  display:inline-flex; align-items:center; justify-content:center;
+  background:var(--lime); color:var(--navy); cursor:pointer;
+  box-shadow: 0 6px 16px -6px rgba(126,218,85,.8);
+  transition: transform .15s, filter .15s;
+}
+.dockAction:hover{ transform: scale(1.06); filter:brightness(1.05); }
+.dockAction.busy{ opacity:.7; }
+.dockAction.busy .ico{ animation: spin 1s linear infinite; }
+@media (max-width:640px){
+  .dock{ bottom:12px; }
+  .dockLink span{ display:none; }
+  .dockLink{ width:44px; padding:0; justify-content:center; }
+}
+
+/* =========================================================
+   Tema "Vetro": render del cestino Sorti sfocato sullo sfondo
+   ========================================================= */
+.scene{ display:none; }
+[data-theme="glass"]{
+  --bg: #d8d6d2;
+  --surface: rgba(255,255,255,.42);
+  --surface-2: rgba(255,255,255,.3);
+  --surface-3: rgba(255,255,255,.62);
+  --border: rgba(255,255,255,.6);
+  --border-strong: rgba(9,24,47,.16);
+  --text:#0b1a30;
+  --text-2:#1f2f47;
+  --muted:#43516a;
+  --muted-2:#56647a;
+  --track: rgba(9,24,47,.10);
+  --brand:#4cb82e;
+  --brand-ink:#2f7d17;
+  --shadow-sm: 0 1px 2px rgba(9,24,47,.06);
+  --shadow: 0 1px 0 rgba(255,255,255,.7) inset, 0 18px 50px -20px rgba(9,24,47,.35);
+  --shadow-lg: 0 30px 80px -20px rgba(9,24,47,.45);
+  --glass: blur(22px) saturate(1.6);
+  color-scheme: light;
+}
+[data-theme="glass"] body{ background: var(--bg); }
+[data-theme="glass"] .scene{
+  display:block;
+  position:fixed; inset:-60px; z-index:-2;
+  background: url("./assets/sorti-bin-hall-sm.jpg") center 40% / cover no-repeat;
+  filter: blur(5px) saturate(1.1);
+  transform: scale(1.05);
+}
+@media (min-width: 900px){
+  [data-theme="glass"] .scene{ background-image: url("./assets/sorti-bin-hall.jpg"); }
+}
+[data-theme="glass"] .scene::after{
+  content:""; position:absolute; inset:0;
+  background:
+    radial-gradient(1200px 700px at 50% 30%, rgba(255,255,255,0) 0%, rgba(255,255,255,.18) 70%),
+    linear-gradient(180deg, rgba(246,244,240,.10) 0%, rgba(232,229,224,.35) 100%);
+}
+[data-theme="glass"] .card,
+[data-theme="glass"] .kpi,
+[data-theme="glass"] .drawerTop,
+[data-theme="glass"] .ddSection,
+[data-theme="glass"] .customModal,
+[data-theme="glass"] .toast{
+  backdrop-filter: var(--glass);
+  -webkit-backdrop-filter: var(--glass);
+}
+[data-theme="glass"] .card,
+[data-theme="glass"] .kpi{ border-radius:24px; }
+[data-theme="glass"] .appbar{
+  background: rgba(255,255,255,.42);
+  backdrop-filter: var(--glass);
+  -webkit-backdrop-filter: var(--glass);
+  border-bottom-color: rgba(255,255,255,.55);
+}
+[data-theme="glass"] .kpiHero{
+  background: linear-gradient(135deg, rgba(19,42,77,.86), rgba(9,24,47,.92));
+  backdrop-filter: var(--glass);
+  -webkit-backdrop-filter: var(--glass);
+  border:1px solid rgba(255,255,255,.18);
+}
+[data-theme="glass"] .tableWrap{ background: rgba(255,255,255,.28); border-color: rgba(255,255,255,.55); }
+[data-theme="glass"] thead th{ background: rgba(255,255,255,.5); }
+[data-theme="glass"] .binTile{ background: rgba(255,255,255,.34); border-color: rgba(255,255,255,.7); }
+[data-theme="glass"] .binTile:hover{ background: rgba(255,255,255,.6); }
+[data-theme="glass"] .tileIcon{ background: rgba(255,255,255,.75); }
+[data-theme="glass"] select, [data-theme="glass"] input, [data-theme="glass"] .btn:not(.btnPrimary), [data-theme="glass"] .iconBtn, [data-theme="glass"] .statusPill{
+  background: rgba(255,255,255,.6); border-color: rgba(255,255,255,.75);
+}
+[data-theme="glass"] .drawer{
+  background: rgba(236,234,230,.62);
+  backdrop-filter: blur(30px) saturate(1.5);
+  -webkit-backdrop-filter: blur(30px) saturate(1.5);
+  border-left-color: rgba(255,255,255,.6);
+}
+[data-theme="glass"] .customModal{ background: rgba(255,255,255,.78); }
+[data-theme="glass"] .dock{ background: rgba(255,255,255,.5); border-color: rgba(255,255,255,.7); }
+[data-theme="glass"] .alertItem{ background: rgba(255,255,255,.45); }
+[data-theme="glass"] .emptyState{ background: rgba(255,255,255,.35); }
+
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))){
+  [data-theme="glass"]{ --surface: rgba(255,255,255,.88); --surface-2: rgba(255,255,255,.75); }
+}
+[data-theme="glass"] .pageHead h1,
+[data-theme="glass"] .pageHead .sub,
+[data-theme="glass"] .pageHead .fieldLabel,
+[data-theme="glass"] .foot{
+  text-shadow: 0 0 18px rgba(255,255,255,.95), 0 0 4px rgba(255,255,255,.8);
+}
+[data-theme="glass"] .pageHead .sub{ color:#22324a; font-weight:500; }
+[data-theme="glass"] .pageHead .fieldLabel{ color:#22324a; }

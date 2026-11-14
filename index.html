@@ -6,14 +6,14 @@
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>Sorti · SmartBin Console</title>
 
-  <meta name="theme-color" content="#0f2a2a" />
+  <meta name="theme-color" content="#09182F" />
 
   <script>
     // Applica il tema prima del primo paint (evita flash)
     (function () {
       try {
         var t = localStorage.getItem("sorti_theme");
-        if (t !== "light" && t !== "dark") {
+        if (t !== "light" && t !== "dark" && t !== "glass") {
           t = window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
         }
         document.documentElement.setAttribute("data-theme", t);
@@ -25,18 +25,13 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
 
-  <link rel="stylesheet" href="./app.css?v=220">
+  <link rel="stylesheet" href="./app.css?v=300">
 </head>
 
 <body>
+  <div class="scene" aria-hidden="true"></div>
   <!-- Icone riutilizzabili -->
   <svg width="0" height="0" style="position:absolute" aria-hidden="true">
-    <defs>
-      <linearGradient id="sortiGrad" x1="0" y1="0" x2="1" y2="1">
-        <stop offset="0" stop-color="#43cea2" />
-        <stop offset="1" stop-color="#185a9d" />
-      </linearGradient>
-    </defs>
     <symbol id="i-scale" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" d="M12 3v3M5 7h14M7 7l-3 7a3.5 3.5 0 0 0 6 0L7 7Zm10 0-3 7a3.5 3.5 0 0 0 6 0l-3-7ZM12 6v14M8 20h8"/></symbol>
     <symbol id="i-leaf" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" d="M5 19c0-8 5-13 15-14-1 10-6 15-14 15M5 19c3-4 6-6.5 10-8.5"/></symbol>
     <symbol id="i-stack" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" d="m12 3 9 5-9 5-9-5 9-5Zm-9 9 9 5 9-5M3 16l9 5 9-5"/></symbol>
@@ -48,21 +43,22 @@
     <symbol id="i-download" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" d="M12 3v12m0 0-4-4m4 4 4-4M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2"/></symbol>
     <symbol id="i-sliders" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" d="M4 6h10m4 0h2M4 12h4m4 0h8M4 18h12m4 0h0"/><circle cx="16" cy="6" r="2" fill="none" stroke="currentColor" stroke-width="1.8"/><circle cx="10" cy="12" r="2" fill="none" stroke="currentColor" stroke-width="1.8"/><circle cx="18" cy="18" r="2" fill="none" stroke="currentColor" stroke-width="1.8"/></symbol>
     <symbol id="i-report" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8l-5-5Zm0 0v5h5M9 17v-3m3 3v-6m3 6v-4"/></symbol>
+    <symbol id="i-glass" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" d="M12 3l1.6 4.4L18 9l-4.4 1.6L12 15l-1.6-4.4L6 9l4.4-1.6L12 3Zm6.5 11 .8 2.2 2.2.8-2.2.8-.8 2.2-.8-2.2-2.2-.8 2.2-.8.8-2.2ZM5 15l.6 1.4L7 17l-1.4.6L5 19l-.6-1.4L3 17l1.4-.6L5 15Z"/></symbol>
+    <symbol id="i-home" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" d="M3 10.5 12 3l9 7.5V20a1 1 0 0 1-1 1h-5v-6h-6v6H4a1 1 0 0 1-1-1v-9.5Z"/></symbol>
+    <symbol id="i-bin" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" d="M4 6h16M10 3h4M6 6l1 14a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1l1-14M10 10v7m4-7v7"/></symbol>
+    <symbol id="i-chart" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" d="M3 3v18h18M7 15l4-4 3 3 5-6"/></symbol>
+    <symbol id="i-list" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" d="M8 6h13M8 12h13M8 18h13M3.5 6h.01M3.5 12h.01M3.5 18h.01"/></symbol>
+    <symbol id="i-grid" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" d="M4 4h7v7H4zM13 4h7v7h-7zM4 13h7v7H4zM13 13h7v7h-7z"/></symbol>
     <symbol id="i-key" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" d="M15 9a3 3 0 1 1-6 0 3 3 0 0 1 6 0Zm-3 3v9m0-4h3m-3 2.5h2"/></symbol>
   </svg>
 
   <header class="appbar">
     <div class="appbarInner">
       <div class="brand">
-        <svg class="logo" viewBox="0 0 40 40" aria-hidden="true">
-          <rect width="40" height="40" rx="11" fill="url(#sortiGrad)" />
-          <rect x="9.5" y="19" width="5.5" height="12" rx="2.75" fill="#fff" fill-opacity=".55" />
-          <rect x="17.25" y="12" width="5.5" height="19" rx="2.75" fill="#fff" />
-          <rect x="25" y="15.5" width="5.5" height="15.5" rx="2.75" fill="#fff" fill-opacity=".8" />
-        </svg>
+        <img class="logoImg" src="./assets/sorti-logo.png" alt="Sorti" width="85" height="36" />
         <div class="brandText">
-          <span class="wordmark">sorti</span>
           <span class="product">SmartBin Console</span>
+          <span class="productSub">Butta qui, smista lui.</span>
         </div>
       </div>
 
@@ -78,6 +74,7 @@
         <button class="iconBtn" id="btnTheme" title="Cambia tema" aria-label="Cambia tema">
           <svg class="ico themeSun"><use href="#i-sun" /></svg>
           <svg class="ico themeMoon"><use href="#i-moon" /></svg>
+          <svg class="ico themeGlass"><use href="#i-glass" /></svg>
         </button>
         <button class="iconBtn" id="btnSettings" title="Impostazioni e export" aria-label="Impostazioni">
           <svg class="ico"><use href="#i-gear" /></svg>
@@ -88,7 +85,7 @@
   </header>
 
   <main class="wrap">
-    <section class="pageHead">
+    <section class="pageHead" id="sec-overview" data-section>
       <div>
         <h1>Panoramica</h1>
         <p class="sub">Raccolta differenziata, CO₂ risparmiata e stato di riempimento in tempo reale.</p>
@@ -146,7 +143,7 @@
 
     <div id="errBox" class="errBox"></div>
 
-    <section class="card">
+    <section class="card" id="sec-bins" data-section>
       <div class="cardHeader">
         <div>
           <h2 class="title">Cestini</h2>
@@ -157,6 +154,10 @@
           </div>
         </div>
         <div class="cardActions">
+          <div class="seg onlyDesktop" role="group" aria-label="Vista cestini">
+            <button type="button" class="segBtn" data-view="tiles" title="Vista a schede"><svg class="ico"><use href="#i-grid" /></svg></button>
+            <button type="button" class="segBtn" data-view="table" title="Vista a tabella"><svg class="ico"><use href="#i-list" /></svg></button>
+          </div>
           <label class="switch" title="Mostra solo cestini in attenzione o critici">
             <input type="checkbox" id="onlyAlerts">
             <span class="switchTrack"><span class="switchThumb"></span></span>
@@ -171,7 +172,7 @@
 
       <div id="alertsList" class="alertsList" style="display:none"></div>
 
-      <div class="tableWrap onlyDesktop">
+      <div class="tableWrap binsTableWrap">
         <table class="binsTable">
           <thead>
             <tr>
@@ -186,10 +187,10 @@
         </table>
       </div>
 
-      <div id="binsCards" class="cardsGrid onlyMobile"></div>
+      <div id="binsCards" class="tilesGrid"></div>
     </section>
 
-    <section class="insights">
+    <section class="insights" id="sec-trend" data-section>
       <div class="card">
         <div class="cardHeader">
           <div>
@@ -213,7 +214,7 @@
       </div>
     </section>
 
-    <section class="card">
+    <section class="card" id="sec-events" data-section>
       <div class="cardHeader">
         <div>
           <h2 class="title">Conferimenti recenti</h2>
@@ -241,10 +242,18 @@
     </section>
 
     <footer class="foot">
-      <span class="wordmark small">sorti</span>
-      <span class="muted">SmartBin Console</span>
+      <img class="logoImg sm" src="./assets/sorti-logo.png" alt="Sorti" width="57" height="24" />
+      <span class="muted">SmartBin Console · Butta qui, smista lui.</span>
     </footer>
   </main>
+
+  <nav class="dock" aria-label="Sezioni">
+    <a href="#sec-overview" class="dockLink active"><svg class="ico"><use href="#i-home" /></svg><span>Panoramica</span></a>
+    <a href="#sec-bins" class="dockLink"><svg class="ico"><use href="#i-bin" /></svg><span>Cestini</span></a>
+    <a href="#sec-trend" class="dockLink"><svg class="ico"><use href="#i-chart" /></svg><span>Andamento</span></a>
+    <a href="#sec-events" class="dockLink"><svg class="ico"><use href="#i-list" /></svg><span>Conferimenti</span></a>
+    <button class="dockAction" data-esg-report title="Scarica il report ESG"><svg class="ico"><use href="#i-report" /></svg><span class="srOnly">Report ESG</span></button>
+  </nav>
 
   <div id="toasts" class="toasts" aria-live="polite"></div>
 
@@ -409,9 +418,9 @@
   </dialog>
 
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-  <script src="./config.js?v=220"></script>
-  <script src="./app.js?v=220"></script>
-  <script src="./report.js?v=220"></script>
+  <script src="./config.js?v=300"></script>
+  <script src="./app.js?v=300"></script>
+  <script src="./report.js?v=300"></script>
 </body>
 
 </html>

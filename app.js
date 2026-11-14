@@ -384,17 +384,18 @@
   }
 
   // Colori per frazione, ispirati alla raccolta differenziata italiana
+  // Colori delle frazioni come sul cestino Sorti (ruota e icone laterali)
   const MATERIAL_RULES = [
     [/plast|pet|hdpe|ldpe/i, "#f2b705"],
-    [/cart|paper|card|cellul/i, "#2f7fd8"],
-    [/vetr|glass/i, "#22a45d"],
-    [/organ|umid|food|bio|compost/i, "#8b5a3c"],
-    [/metal|allum|alumin|latt|can|accia|steel/i, "#8798a8"],
-    [/indiff|secco|resid|general|other|altro|mixed/i, "#5b6670"],
+    [/cart|paper|card|cellul/i, "#2f6fd8"],
+    [/vetr|glass/i, "#1e8c45"],
+    [/organ|umid|food|bio|compost/i, "#c62832"],
+    [/metal|allum|alumin|latt|can|accia|steel/i, "#4fb3e0"],
+    [/indiff|secco|resid|general|other|altro|mixed/i, "#5b5f8a"],
     [/raee|elettr|batter|pil/i, "#c2410c"],
     [/tess|textile|abbig/i, "#a855f7"],
   ];
-  const MATERIAL_FALLBACK = ["#14a37f", "#185a9d", "#0ea5b7", "#7c6cf2", "#e0729a", "#94a3b8"];
+  const MATERIAL_FALLBACK = ["#4cb82e", "#09182F", "#0ea5b7", "#7c6cf2", "#e0729a", "#94a3b8"];
   const materialColorCache = {};
   function materialColor(name) {
     const key = String(name || "").trim().toLowerCase();
@@ -639,13 +640,20 @@
     }, ms);
   }
 
+  const LS_VIEW = "sorti_bins_view";
+  const binsView = () => (localStorage.getItem(LS_VIEW) === "table" ? "table" : "tiles");
+
   function syncResponsiveBinsView() {
     const mobile = window.matchMedia("(max-width: 820px)").matches;
+    const view = mobile ? "tiles" : binsView();
     const binsTableWrap = $("binsBody")?.closest(".tableWrap");
     const binsCards = $("binsCards");
 
-    if (binsTableWrap) binsTableWrap.style.display = mobile ? "none" : "block";
-    if (binsCards) binsCards.style.display = mobile ? "grid" : "none";
+    if (binsTableWrap) binsTableWrap.style.display = view === "table" ? "block" : "none";
+    if (binsCards) binsCards.style.display = view === "tiles" ? "grid" : "none";
+    document.querySelectorAll(".segBtn[data-view]").forEach(btn => {
+      btn.classList.toggle("active", btn.getAttribute("data-view") === binsView());
+    });
   }
 
   // --- Tema & grafici ---
@@ -682,19 +690,19 @@
   function areaGradient(ctx) {
     const { chart } = ctx;
     const { ctx: c, chartArea } = chart;
-    if (!chartArea) return "rgba(67,206,162,.15)";
+    if (!chartArea) return "rgba(126,218,85,.15)";
     const g = c.createLinearGradient(0, chartArea.top, 0, chartArea.bottom);
-    g.addColorStop(0, "rgba(67,206,162,.32)");
-    g.addColorStop(1, "rgba(24,90,157,0)");
+    g.addColorStop(0, "rgba(126,218,85,.38)");
+    g.addColorStop(1, "rgba(126,218,85,0)");
     return g;
   }
   function lineGradient(ctx) {
     const { chart } = ctx;
     const { ctx: c, chartArea } = chart;
-    if (!chartArea) return "#43cea2";
+    if (!chartArea) return "#5fc63b";
     const g = c.createLinearGradient(chartArea.left, 0, chartArea.right, 0);
-    g.addColorStop(0, "#43cea2");
-    g.addColorStop(1, "#185a9d");
+    g.addColorStop(0, "#4cb82e");
+    g.addColorStop(1, "#7EDA55");
     return g;
   }
 
@@ -756,7 +764,7 @@
           tension: .35,
           pointRadius: 0,
           pointHoverRadius: 5,
-          pointHoverBackgroundColor: "#185a9d",
+          pointHoverBackgroundColor: "#09182F",
           pointHoverBorderColor: t.surface,
           pointHoverBorderWidth: 2,
           fill: true
@@ -860,8 +868,6 @@
   function setTheme(theme, persist = true) {
     document.documentElement.setAttribute("data-theme", theme);
     if (persist) localStorage.setItem(LS_THEME, theme);
-    const meta = document.querySelector('meta[name="theme-color"]');
-    if (meta) meta.setAttribute("content", cssVar("--surface"));
     retintCharts();
   }
 
@@ -1083,7 +1089,7 @@
       const sFill = binStatusFill(b);
       setDrawerGlyph(fill, sFill);
       safeText("ddFill", `${Math.round(fill)}%`);
-      safeHTML("ddFillHint", `${fillBadge(fill)} <span>${fillSource === "sensor" ? "da sensori" : "stimato"}</span>`);
+      safeHTML("ddFillHint", `${fillBadge(sFill)} <span>${fillSource === "sensor" ? "da sensori" : "stimato"}</span>`);
       safeText("ddWeight", formatWeight(wG));
 
       const capKg = capG / 1000;
@@ -1305,6 +1311,14 @@
   // Gli elementi con data-k / data-v / data-p partono dal valore precedente
   // e salgono (o scendono) fino al nuovo, invece di saltare.
   const levelMemory = {};
+  function setLevel(el, p, v) {
+    if (p === "dash") {
+      const c = Number(el.getAttribute("stroke-dasharray")) || 0;
+      el.style.strokeDashoffset = `${c * (1 - v / 100)}`;
+    } else {
+      el.style[p] = `${v}%`;
+    }
+  }
   function animateLevels(root) {
     if (!root) return;
     const els = root.querySelectorAll("[data-k]");
@@ -1316,9 +1330,9 @@
       const prev = levelMemory[k];
       const startVal = prev === undefined ? 0 : prev;
       levelMemory[k] = v;
-      if (startVal === v || prefersReducedMotion()) { el.style[p] = `${v}%`; return; }
+      if (startVal === v || prefersReducedMotion()) { setLevel(el, p, v); return; }
       el.style.transition = "none";
-      el.style[p] = `${startVal}%`;
+      setLevel(el, p, startVal);
       pending.push([el, p, v]);
     });
     if (!pending.length) return;
@@ -1326,7 +1340,7 @@
     requestAnimationFrame(() => {
       for (const [el, p, v] of pending) {
         el.style.transition = "";
-        el.style[p] = `${v}%`;
+        setLevel(el, p, v);
       }
     });
   }
@@ -1462,34 +1476,40 @@
       const emptyMsg = onlyAlerts ? "Nessun cestino in attenzione. Tutto regolare." : "Nessun cestino registrato.";
       safeHTML("binsBody", rowsHTML || `<tr class="emptyRow"><td colspan="5">${emptyMsg}</td></tr>`);
 
+      const RING_C = 2 * Math.PI * 42;
       const cards = bins.map(b => {
         const i = "m";
         const fill = getFillPercent(b);
         const sFill = binStatusFill(b);
+        const st = statusOf(sFill);
         const p = priorityOf(sFill);
         const priClass = (p === 2) ? "priCritical" : (p === 1) ? "priWarn" : "";
         const id = escapeHtml(b.bin_id);
+        const f = clampPct(fill);
 
         return `
-          <div id="bincard-${id}" class="binCard ${priClass} ${freshClass(b.bin_id)}" data-bin="${id}">
-            <div class="binCardTop">
-              <div class="binCell">
-                ${binGlyphHTML(fill, sFill, `${b.bin_id}|glyph|${i}`)}
-                <div>
-                  <div class="binId">${id}</div>
-                  <div class="binMeta">${fillBadge(sFill)}</div>
-                </div>
+          <div id="bincard-${id}" class="binTile ${priClass} ${freshClass(b.bin_id)}" data-bin="${id}" role="button" tabindex="0" title="Apri dettagli">
+            <div class="tileTop">
+              <span class="tileIcon">${binGlyphHTML(fill, sFill, `${b.bin_id}|glyph|${i}`)}</span>
+              ${fillBadge(sFill)}
+            </div>
+            <div class="ring ${st}">
+              <svg viewBox="0 0 100 100" aria-hidden="true">
+                <circle class="ringTrack" cx="50" cy="50" r="42" />
+                <circle class="ringVal" cx="50" cy="50" r="42"
+                  stroke-dasharray="${RING_C.toFixed(2)}"
+                  data-k="${id}|ring" data-v="${f}" data-p="dash"
+                  style="stroke-dashoffset:${(RING_C * (1 - f / 100)).toFixed(2)}" />
+              </svg>
+              <div class="ringCenter">
+                <span class="ringPct">${Math.round(fill)}%</span>
+                <span class="ringLbl">riempito</span>
               </div>
-              ${compStripHTML(b, `${b.bin_id}|m`)}
             </div>
-            <div class="binCardRow">
-              <span class="fillPct">${Math.round(fill)}%</span>
-              <span class="bar"><div data-k="${id}|mbar" data-v="${clampPct(fill)}" data-p="width" style="width:${clampPct(fill)}%; background:${barColor(fill)}"></div></span>
-            </div>
-            <div class="binCardFoot">
-              <span><b style="color:var(--text-2)">${formatWeight(b.current_weight_g)}</b> / ${fmtKg(b.capacity_g)}</span>
-              ${activityHTML(b.last_seen)}
-            </div>
+            <div class="tileName">${id}</div>
+            <div class="tileSub"><b>${formatWeight(b.current_weight_g)}</b> di ${fmtKg(b.capacity_g)}</div>
+            <div class="tileComps">${compStripHTML(b, `${b.bin_id}|m`) || `<span class="compNone">${getFillSource(b) === "sensor" ? "Nessun dato sensori" : "Stima da peso"}</span>`}</div>
+            <div class="tileFoot">${activityHTML(b.last_seen)}</div>
           </div>
         `;
       }).join("");
@@ -1591,13 +1611,45 @@
 
   function wireUI() {
     // Tema
-    $("btnTheme").onclick = () => {
-      const cur = document.documentElement.getAttribute("data-theme") === "dark" ? "dark" : "light";
-      setTheme(cur === "dark" ? "light" : "dark");
+    const THEMES = ["light", "dark", "glass"];
+    const THEME_NAME = { light: "Chiaro", dark: "Scuro", glass: "Vetro" };
+    const syncThemeBtn = () => {
+      const cur = document.documentElement.getAttribute("data-theme") || "light";
+      const next = THEMES[(THEMES.indexOf(cur) + 1) % THEMES.length];
+      $("btnTheme").title = `Tema: ${THEME_NAME[cur] || cur} · passa a ${THEME_NAME[next]}`;
     };
+    $("btnTheme").onclick = () => {
+      const cur = document.documentElement.getAttribute("data-theme") || "light";
+      setTheme(THEMES[(THEMES.indexOf(cur) + 1) % THEMES.length]);
+      syncThemeBtn();
+    };
+    syncThemeBtn();
+
+    // Vista cestini: schede / tabella
+    document.querySelectorAll(".segBtn[data-view]").forEach(btn => {
+      btn.onclick = () => { localStorage.setItem(LS_VIEW, btn.getAttribute("data-view")); syncResponsiveBinsView(); };
+    });
+
+    // Barra di navigazione: sezione attiva durante lo scroll
+    const dockLinks = [...document.querySelectorAll(".dockLink")];
+    const setActive = (id) => dockLinks.forEach(a => a.classList.toggle("active", a.getAttribute("href") === `#${id}`));
+    dockLinks.forEach(a => a.addEventListener("click", (e) => {
+      const target = document.querySelector(a.getAttribute("href"));
+      if (!target) return;
+      e.preventDefault();
+      target.scrollIntoView({ behavior: prefersReducedMotion() ? "auto" : "smooth", block: "start" });
+      setActive(target.id);
+    }));
+    if ("IntersectionObserver" in window) {
+      const io = new IntersectionObserver((entries) => {
+        const vis = entries.filter(en => en.isIntersecting).sort((a, b) => a.boundingClientRect.top - b.boundingClientRect.top);
+        if (vis[0]) setActive(vis[0].target.id);
+      }, { rootMargin: "-30% 0px -60% 0px" });
+      document.querySelectorAll("[data-section]").forEach(sec => io.observe(sec));
+    }
     if (window.matchMedia) {
       window.matchMedia("(prefers-color-scheme: dark)").addEventListener?.("change", (e) => {
-        if (!localStorage.getItem(LS_THEME)) setTheme(e.matches ? "dark" : "light", false);
+        if (!localStorage.getItem(LS_THEME)) { setTheme(e.matches ? "dark" : "light", false); syncThemeBtn(); }
       });
     }
 
@@ -1611,6 +1663,12 @@
     document.addEventListener("click", (e) => {
       const el = e.target.closest?.("[data-bin]");
       if (el && !el.closest("#drawer")) openBinDrawer(el.getAttribute("data-bin"));
+    });
+    document.addEventListener("keydown", (e) => {
+      if ((e.key === "Enter" || e.key === " ") && e.target?.matches?.(".binTile[data-bin]")) {
+        e.preventDefault();
+        openBinDrawer(e.target.getAttribute("data-bin"));
+      }
     });
 
     const devWrap = $("devSimWrap");
