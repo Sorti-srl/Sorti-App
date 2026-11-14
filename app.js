@@ -57,7 +57,7 @@
         inputEl.value = "";
       }
 
-      btnCancel.style.display = (type === "alert") ? "none" : "inline-block";
+      btnCancel.style.display = (type === "alert") ? "none" : "";
 
       modal.showModal();
 
@@ -128,13 +128,15 @@
   function updateThresholdLabels() {
     safeText("warnLabel", `${thresholds.warn}%`);
     safeText("critLabel", `${thresholds.critical}%`);
+    const btn = $("btnEditThresholds");
+    if (btn) btn.title = `Soglie: attenzione ≥ ${thresholds.warn}% · critico ≥ ${thresholds.critical}%`;
   }
 
   function setConnState(state) {
     const dot = $("connDot");
     if (!dot) return;
     dot.classList.remove("warn", "bad");
-    if (state === "polling") dot.classList.add("warn");
+    // polling = funzionamento normale (aggiornamento periodico)
     if (state === "offline") dot.classList.add("bad");
   }
 
@@ -343,18 +345,73 @@
     URL.revokeObjectURL(a.href);
   }
 
-  function barColor(fill) {
+  function statusOf(fill) {
     const f = Number(fill || 0);
-    if (f >= thresholds.critical) return "linear-gradient(90deg, rgba(255,93,93,.95), rgba(255,140,73,.95))";
-    if (f >= thresholds.warn) return "linear-gradient(90deg, rgba(247,201,72,.95), rgba(255,140,73,.85))";
-    return "linear-gradient(90deg, rgba(67,206,162,.95), rgba(24,90,157,.90))";
+    if (f >= thresholds.critical) return "crit";
+    if (f >= thresholds.warn) return "warn";
+    return "ok";
+  }
+
+  const STATUS_LABEL = { ok: "Regolare", warn: "Attenzione", crit: "Critico" };
+
+  function barColor(fill) {
+    const s = statusOf(fill);
+    if (s === "crit") return "var(--crit)";
+    if (s === "warn") return "var(--warn)";
+    return "var(--brand-grad)";
   }
 
   function fillBadge(fill) {
-    const f = Number(fill || 0);
-    if (f >= thresholds.critical) return `<span class="badge bBAD">CRITICO</span>`;
-    if (f >= thresholds.warn) return `<span class="badge bWARN">ATTENZIONE</span>`;
-    return `<span class="badge bOK">OK</span>`;
+    const s = statusOf(fill);
+    return `<span class="badge ${s}">${STATUS_LABEL[s]}</span>`;
+  }
+
+  // Stato operativo del cestino: conta lo scomparto più pieno
+  // (uno scomparto pieno blocca quella frazione anche se il totale è basso)
+  function binStatusFill(b) {
+    let worst = getFillPercent(b);
+    for (const c of getCompartments(b)) {
+      const f = getSensorFillPercent(c);
+      if (f !== null && f > worst) worst = f;
+    }
+    return worst;
+  }
+
+  function binGlyphHTML(fill, statusFill = fill) {
+    const f = clampPct(fill);
+    return `<div class="binGlyph ${statusOf(statusFill)}" aria-hidden="true"><div class="binGlyphFill" style="height:${f}%"></div></div>`;
+  }
+
+  // Colori per frazione, ispirati alla raccolta differenziata italiana
+  const MATERIAL_RULES = [
+    [/plast|pet|hdpe|ldpe/i, "#f2b705"],
+    [/cart|paper|card|cellul/i, "#2f7fd8"],
+    [/vetr|glass/i, "#22a45d"],
+    [/organ|umid|food|bio|compost/i, "#8b5a3c"],
+    [/metal|allum|alumin|latt|can|accia|steel/i, "#8798a8"],
+    [/indiff|secco|resid|general|other|altro|mixed/i, "#5b6670"],
+    [/raee|elettr|batter|pil/i, "#c2410c"],
+    [/tess|textile|abbig/i, "#a855f7"],
+  ];
+  const MATERIAL_FALLBACK = ["#14a37f", "#185a9d", "#0ea5b7", "#7c6cf2", "#e0729a", "#94a3b8"];
+  const materialColorCache = {};
+  function materialColor(name) {
+    const key = String(name || "").trim().toLowerCase();
+    if (materialColorCache[key]) return materialColorCache[key];
+    let col = null;
+    for (const [re, c] of MATERIAL_RULES) if (re.test(key)) { col = c; break; }
+    if (!col) {
+      let h = 0;
+      for (const ch of key) h = (h * 31 + ch.charCodeAt(0)) >>> 0;
+      col = MATERIAL_FALLBACK[h % MATERIAL_FALLBACK.length];
+    }
+    materialColorCache[key] = col;
+    return col;
+  }
+
+  function materialHTML(name) {
+    const n = name || "—";
+    return `<span class="matCell"><span class="matDot" style="background:${materialColor(n)}"></span>${escapeHtml(n)}</span>`;
   }
 
   function priorityOf(fill) {
@@ -364,65 +421,48 @@
     return 0;
   }
 
-  function sensorMetaHTML(obj) {
-    const source = getFillSource(obj);
-    const comps = getCompartments(obj);
-    const s = countCompartmentStates(obj);
-
-    const parts = [];
-    parts.push(source === "sensor" ? "Fonte: sensori" : "Fonte: stima");
-    if (comps.length > 0) {
-      parts.push(`Scomparti: ${comps.length}`);
-      parts.push(`FULL ${s.full} • MED ${s.med} • EMP ${s.empty}`);
-    }
-    return `<div class="sensorMeta">${parts.join(" • ")}</div>`;
-  }
-
-  function compactCompartmentsHTML(obj) {
-    const comps = getCompartments(obj)
+  function compartmentsSorted(obj) {
+    return getCompartments(obj)
       .slice()
       .sort((a, b) => Number(a?.compartment_id || 0) - Number(b?.compartment_id || 0));
+  }
 
+  // Mini visualizzazione a colonne: uno "scomparto" per colonna
+  function compStripHTML(obj) {
+    const comps = compartmentsSorted(obj);
+    if (!comps.length) return "";
+    return `<div class="compStrip">${comps.map(c => {
+      const fill = getSensorFillPercent(c);
+      const label = c?.label || `Scomparto ${c?.compartment_id ?? "—"}`;
+      if (fill === null) {
+        return `<span class="compCol nodata" title="${escapeHtml(label)}: nessun dato"></span>`;
+      }
+      return `<span class="compCol ${statusOf(fill)}" title="${escapeHtml(label)}: ${Math.round(fill)}%"><i style="height:${fill}%"></i></span>`;
+    }).join("")}</div>`;
+  }
+
+  function compSummaryHTML(obj) {
+    const comps = compartmentsSorted(obj);
     if (!comps.length) {
-      return `
-        <div style="margin-top:8px; color:rgba(255,255,255,.58); font-size:12px;">
-          Nessun ultimo livello sensore disponibile.
-        </div>
-      `;
+      return `<span class="compNone">${getFillSource(obj) === "sensor" ? "Nessun dato sensori" : "Stima da peso"}</span>`;
     }
-
+    let crit = 0, warn = 0;
+    for (const c of comps) {
+      const f = getSensorFillPercent(c);
+      if (f === null) continue;
+      const s = statusOf(f);
+      if (s === "crit") crit++;
+      else if (s === "warn") warn++;
+    }
+    const parts = [];
+    if (crit) parts.push(`<b style="color:var(--crit-ink)">${crit} critic${crit === 1 ? "o" : "i"}</b>`);
+    if (warn) parts.push(`<b style="color:var(--warn-ink)">${warn} in attenzione</b>`);
+    if (!parts.length) parts.push("tutti regolari");
     return `
-      <div style="margin-top:10px; display:grid; gap:8px;">
-        ${comps.map(c => {
-          const fill = getSensorFillPercent(c);
-          const state = getSensorState(c) || "—";
-          const dist = getSensorDistanceCm(c);
-          const label = c?.label || `Scomparto ${c?.compartment_id ?? "—"}`;
-          const pct = fill !== null ? `${Math.round(fill)}%` : "—";
-          const barWidth = Math.max(0, Math.min(100, fill ?? 0));
-
-          let stateClass = "bOK";
-          if (state === "FULL") stateClass = "bBAD";
-          else if (state === "MEDIUM") stateClass = "bWARN";
-
-          return `
-            <div style="border:1px solid rgba(255,255,255,.08); border-radius:14px; padding:8px 10px; background:rgba(255,255,255,.03);">
-              <div style="display:flex; align-items:center; justify-content:space-between; gap:10px; flex-wrap:wrap;">
-                <div style="font-size:12.5px; font-weight:900;">${escapeHtml(label)}</div>
-                <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
-                  <span class="badge ${stateClass}">${escapeHtml(state)}</span>
-                  <span class="fillPill">${escapeHtml(pct)}</span>
-                </div>
-              </div>
-
-              <div style="margin-top:8px; height:10px; width:100%; border-radius:999px; border:1px solid rgba(255,255,255,.10); background:rgba(255,255,255,.05); overflow:hidden;">
-                <div style="height:100%; width:${barWidth}%; background:${barColor(fill ?? 0)};"></div>
-              </div>
-            </div>
-          `;
-        }).join("")}
-      </div>
-    `;
+      <div class="compInfo">
+        ${compStripHTML(obj)}
+        <div class="compText"><b>${comps.length}</b> scompart${comps.length === 1 ? "o" : "i"}<br>${parts.join(" · ")}</div>
+      </div>`;
   }
 
   function renderQuickAlerts(bins){
@@ -457,19 +497,20 @@
 
     if (criticalCompartments.length > 0){
       summary.className = "chip bad";
-      summary.textContent = `${criticalCompartments.length} critici`;
+      summary.textContent = `${criticalCompartments.length} scompart${criticalCompartments.length === 1 ? "o critico" : "i critici"}` +
+        (warnCompartments.length ? ` · ${warnCompartments.length} in attenzione` : "");
     } else if (warnCompartments.length > 0){
       summary.className = "chip warn";
-      summary.textContent = `${warnCompartments.length} warning`;
+      summary.textContent = `${warnCompartments.length} scompart${warnCompartments.length === 1 ? "o" : "i"} in attenzione`;
     } else {
       summary.className = "chip ok";
-      summary.textContent = "0";
+      summary.textContent = "Tutto regolare";
     }
 
     const list = $("alertsList");
     if (totalAlerts === 0){
       list.style.display = "none";
-      list.textContent = "";
+      list.innerHTML = "";
       return;
     }
 
@@ -478,13 +519,19 @@
       ...warnCompartments.map(x => ({ ...x, _p: "warn" })),
     ].sort((a, b) => b.fill - a.fill);
 
-    const lines = items.slice(0, 8).map(x => {
-      const tag = x._p === "crit" ? "CRITICO" : "WARNING";
-      return `• ${tag} — ${x.bin_id} / ${x.label} (${Math.round(x.fill)}%)`;
-    }).join("\n");
+    const MAX = 6;
+    const html = items.slice(0, MAX).map(x => `
+      <button type="button" class="alertItem ${x._p}" data-bin="${escapeHtml(x.bin_id)}" title="Apri dettagli cestino">
+        <div class="aMain">
+          <div class="aBin">${escapeHtml(x.bin_id)}</div>
+          <div class="aComp">${escapeHtml(x.label)} · ${x._p === "crit" ? "critico" : "attenzione"}</div>
+        </div>
+        <div class="aPct">${Math.round(x.fill)}%</div>
+      </button>
+    `).join("") + (items.length > MAX ? `<div class="alertMore">+${items.length - MAX} altri</div>` : "");
 
-    list.style.display = "block";
-    list.textContent = `Da attenzionare:\n${lines}`;
+    list.style.display = "grid";
+    list.innerHTML = html;
   }
 
   function touchBinRow(binId, isoTs) {
@@ -545,9 +592,9 @@
       <tr data-eid="${String(eid)}">
         <td class="muted" title="${whenTitle}">${whenHuman}</td>
         <td><b>${escapeHtml(binId)}</b></td>
-        <td>${escapeHtml(material)}</td>
-        <td>${formatWeight(w)}</td>
-        <td>${formatCO2(co2)}</td>
+        <td>${materialHTML(material)}</td>
+        <td class="right">${formatWeight(w)}</td>
+        <td class="right">${formatCO2(co2)}</td>
         <td class="mono" style="text-align:right" title="${escapeHtml(String(eid))}">${shortId(eid)}</td>
       </tr>
     `;
@@ -570,9 +617,9 @@
       const row = `
         <tr data-eid="${String(eid)}">
           <td class="muted" title="${whenTitle}">${whenHuman}</td>
-          <td>${escapeHtml(material)}</td>
-          <td>${formatWeight(w)}</td>
-          <td>${formatCO2(co2)}</td>
+          <td>${materialHTML(material)}</td>
+          <td class="right">${formatWeight(w)}</td>
+          <td class="right">${formatCO2(co2)}</td>
           <td class="mono" style="text-align:right" title="${escapeHtml(String(eid))}">${shortId(eid)}</td>
         </tr>
       `;
@@ -599,9 +646,62 @@
     if (binsCards) binsCards.style.display = mobile ? "grid" : "none";
   }
 
-  Chart.defaults.color = "rgba(255,255,255,.82)";
-  Chart.defaults.borderColor = "rgba(255,255,255,.08)";
-  Chart.defaults.font.family = "Inter, system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif";
+  // --- Tema & grafici ---
+  const LS_THEME = "sorti_theme";
+  const cssVar = (name) => getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+  const FONT = '"Plus Jakarta Sans", Inter, system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif';
+
+  function chartTheme() {
+    return {
+      text: cssVar("--muted") || "#66766f",
+      strong: cssVar("--text") || "#0f1e1b",
+      grid: cssVar("--border") || "#e2e8e6",
+      surface: cssVar("--surface") || "#fff",
+      brand: cssVar("--brand") || "#14a37f",
+    };
+  }
+
+  function applyChartDefaults() {
+    const t = chartTheme();
+    Chart.defaults.color = t.text;
+    Chart.defaults.borderColor = t.grid;
+    Chart.defaults.font.family = FONT;
+    Chart.defaults.font.size = 12;
+    Chart.defaults.plugins.tooltip.backgroundColor = "rgba(15,30,27,.92)";
+    Chart.defaults.plugins.tooltip.padding = 10;
+    Chart.defaults.plugins.tooltip.cornerRadius = 8;
+    Chart.defaults.plugins.tooltip.titleFont = { family: FONT, weight: "700", size: 12 };
+    Chart.defaults.plugins.tooltip.bodyFont = { family: FONT, weight: "600", size: 12 };
+    Chart.defaults.plugins.tooltip.displayColors = false;
+  }
+  applyChartDefaults();
+
+  // Riempimento a gradiente con i colori Sorti
+  function areaGradient(ctx) {
+    const { chart } = ctx;
+    const { ctx: c, chartArea } = chart;
+    if (!chartArea) return "rgba(67,206,162,.15)";
+    const g = c.createLinearGradient(0, chartArea.top, 0, chartArea.bottom);
+    g.addColorStop(0, "rgba(67,206,162,.32)");
+    g.addColorStop(1, "rgba(24,90,157,0)");
+    return g;
+  }
+  function lineGradient(ctx) {
+    const { chart } = ctx;
+    const { ctx: c, chartArea } = chart;
+    if (!chartArea) return "#43cea2";
+    const g = c.createLinearGradient(chartArea.left, 0, chartArea.right, 0);
+    g.addColorStop(0, "#43cea2");
+    g.addColorStop(1, "#185a9d");
+    return g;
+  }
+
+  function formatDayLabel(day) {
+    const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(day || ""));
+    const d = m ? new Date(+m[1], +m[2] - 1, +m[3]) : isoToDate(day);
+    if (!d) return day;
+    return d.toLocaleDateString("it-IT", { day: "2-digit", month: "short" });
+  }
 
   const donutCenterText = {
     id: "donutCenterText",
@@ -611,10 +711,11 @@
       if (chart.config?.type !== "doughnut") return;
 
       const ds = chart.data?.datasets?.[0];
-      if (!ds || !Array.isArray(ds.data)) return;
+      if (!ds || !Array.isArray(ds.data) || !ds.data.length) return;
 
       const totalG = ds.data.reduce((s, v) => s + (Number(v) || 0), 0);
       const totalTxt = formatWeight(totalG);
+      const t = chartTheme();
 
       const x = (chartArea.left + chartArea.right) / 2;
       const y = (chartArea.top + chartArea.bottom) / 2;
@@ -623,13 +724,13 @@
       ctx.textAlign = "center";
       ctx.textBaseline = "middle";
 
-      ctx.font = "700 12px Inter, system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif";
-      ctx.fillStyle = "rgba(255,255,255,.70)";
-      ctx.fillText("Totale", x, y - 10);
+      ctx.font = `600 11px ${FONT}`;
+      ctx.fillStyle = t.text;
+      ctx.fillText("TOTALE", x, y - 11);
 
-      ctx.font = "900 16px Inter, system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif";
-      ctx.fillStyle = "rgba(255,255,255,.92)";
-      ctx.fillText(totalTxt, x, y + 10);
+      ctx.font = `800 18px ${FONT}`;
+      ctx.fillStyle = t.strong;
+      ctx.fillText(totalTxt, x, y + 9);
 
       ctx.restore();
     }
@@ -639,114 +740,127 @@
   let lineChart = null;
   let doughnutChart = null;
 
-  function initCharts() {
-    lineChart = new Chart($("co2Line").getContext("2d"), {
+  function lineConfig(label, withTooltip = true) {
+    const t = chartTheme();
+    return {
       type: "line",
       data: {
         labels: [], datasets: [{
-          label: "CO₂",
+          label,
           data: [],
-          borderWidth: 2,
-          tension: .25,
-          pointRadius: 2,
+          borderWidth: 2.5,
+          borderColor: lineGradient,
+          backgroundColor: areaGradient,
+          tension: .35,
+          pointRadius: 0,
           pointHoverRadius: 5,
+          pointHoverBackgroundColor: "#185a9d",
+          pointHoverBorderColor: t.surface,
+          pointHoverBorderWidth: 2,
           fill: true
         }]
       },
       options: {
         responsive: true, maintainAspectRatio: false,
+        interaction: { mode: "index", intersect: false },
         plugins: {
           legend: { display: false },
-          tooltip: { callbacks: { label: (ctx) => ` ${formatCO2(ctx.parsed.y)}` } }
+          tooltip: withTooltip ? { callbacks: { label: (ctx) => `CO₂ risparmiata: ${formatCO2(ctx.parsed.y)}` } } : {}
         },
         scales: {
-          x: { grid: { display: false } },
+          x: {
+            grid: { display: false },
+            border: { display: false },
+            ticks: { maxRotation: 0, autoSkipPadding: 18, callback(v) { return formatDayLabel(this.getLabelForValue(v)); } }
+          },
           y: {
-            grid: { color: "rgba(255,255,255,.06)" },
-            ticks: { callback: (v) => formatCO2(v) }
+            beginAtZero: true,
+            border: { display: false },
+            grid: { color: t.grid },
+            ticks: { maxTicksLimit: 5, padding: 8, callback: (v) => formatCO2(v) }
           }
         }
       }
-    });
+    };
+  }
 
-    doughnutChart = new Chart($("matPie").getContext("2d"), {
+  function doughnutConfig() {
+    const t = chartTheme();
+    return {
       type: "doughnut",
       data: {
         labels: [], datasets: [{
           data: [],
-          backgroundColor: [
-            "rgba(67,206,162,.90)",
-            "rgba(24,90,157,.90)",
-            "rgba(247,201,72,.90)",
-            "rgba(255,93,93,.90)",
-            "rgba(164,121,255,.90)",
-            "rgba(255,140,73,.90)",
-            "rgba(96,215,255,.90)",
-            "rgba(160,255,160,.90)"
-          ],
-          borderColor: "rgba(255,255,255,.14)",
-          borderWidth: 1.2
+          backgroundColor: [],
+          borderColor: t.surface,
+          borderWidth: 3,
+          hoverOffset: 6,
+          borderRadius: 4
         }]
       },
       options: {
         responsive: true, maintainAspectRatio: false,
-        cutout: "64%",
+        cutout: "70%",
+        layout: { padding: 6 },
         plugins: {
-          legend: { position: "top", labels: { boxWidth: 12 } },
-          tooltip: { callbacks: { label: (ctx) => ` ${ctx.label}: ${formatWeight(ctx.parsed)}` } },
+          legend: {
+            position: "bottom",
+            labels: { usePointStyle: true, pointStyle: "rectRounded", boxWidth: 10, boxHeight: 10, padding: 14, font: { weight: "600" } }
+          },
+          tooltip: {
+            callbacks: {
+              label: (ctx) => {
+                const total = ctx.dataset.data.reduce((s, v) => s + (Number(v) || 0), 0);
+                const pct = total > 0 ? Math.round((ctx.parsed / total) * 100) : 0;
+                return `${ctx.label}: ${formatWeight(ctx.parsed)} (${pct}%)`;
+              }
+            }
+          },
           donutCenterText: {}
         }
       }
-    });
+    };
+  }
 
-    ddLineChart = new Chart($("ddLine").getContext("2d"), {
-      type: "line",
-      data: {
-        labels: [], datasets: [{
-          label: "CO₂ bin",
-          data: [],
-          borderWidth: 2,
-          tension: .25,
-          pointRadius: 2,
-          pointHoverRadius: 5,
-          fill: true
-        }]
-      },
-      options: {
-        responsive: true, maintainAspectRatio: false,
-        plugins: { legend: { display: false } },
-        scales: {
-          x: { grid: { display: false } },
-          y: { grid: { color: "rgba(255,255,255,.06)" }, ticks: { callback: (v) => formatCO2(v) } }
-        }
-      }
-    });
+  function setDoughnutData(chart, mats) {
+    chart.data.labels = mats.map(r => r.material);
+    chart.data.datasets[0].data = mats.map(r => Number(r.weight_g || 0));
+    chart.data.datasets[0].backgroundColor = mats.map(r => materialColor(r.material));
+    chart.update();
+  }
 
-    ddPieChart = new Chart($("ddPie").getContext("2d"), {
-      type: "doughnut",
-      data: {
-        labels: [], datasets: [{
-          data: [],
-          backgroundColor: [
-            "rgba(67,206,162,.90)",
-            "rgba(24,90,157,.90)",
-            "rgba(247,201,72,.90)",
-            "rgba(255,93,93,.90)",
-            "rgba(164,121,255,.90)",
-            "rgba(255,140,73,.90)",
-            "rgba(96,215,255,.90)",
-            "rgba(160,255,160,.90)"
-          ],
-          borderColor: "rgba(255,255,255,.14)",
-          borderWidth: 1.2
-        }]
-      },
-      options: {
-        responsive: true, maintainAspectRatio: false,
-        cutout: "64%",
-        plugins: { legend: { position: "top", labels: { boxWidth: 12 } }, donutCenterText: {} }
-      }
-    });
+  function initCharts() {
+    lineChart = new Chart($("co2Line").getContext("2d"), lineConfig("CO₂"));
+    doughnutChart = new Chart($("matPie").getContext("2d"), doughnutConfig());
+    ddLineChart = new Chart($("ddLine").getContext("2d"), lineConfig("CO₂ cestino"));
+    ddPieChart = new Chart($("ddPie").getContext("2d"), doughnutConfig());
+  }
+
+  function retintCharts() {
+    applyChartDefaults();
+    const t = chartTheme();
+    for (const ch of [lineChart, ddLineChart]) {
+      if (!ch) continue;
+      ch.options.scales.y.grid.color = t.grid;
+      ch.options.scales.x.ticks.color = t.text;
+      ch.options.scales.y.ticks.color = t.text;
+      ch.data.datasets[0].pointHoverBorderColor = t.surface;
+      ch.update("none");
+    }
+    for (const ch of [doughnutChart, ddPieChart]) {
+      if (!ch) continue;
+      ch.data.datasets[0].borderColor = t.surface;
+      ch.options.plugins.legend.labels.color = t.text;
+      ch.update("none");
+    }
+  }
+
+  function setTheme(theme, persist = true) {
+    document.documentElement.setAttribute("data-theme", theme);
+    if (persist) localStorage.setItem(LS_THEME, theme);
+    const meta = document.querySelector('meta[name="theme-color"]');
+    if (meta) meta.setAttribute("content", cssVar("--surface"));
+    retintCharts();
   }
 
   async function fetchDashboard(days) {
@@ -767,7 +881,7 @@
 
   function startPollingFallback() {
     if (pollTimer) return;
-    setLive("Polling", "polling");
+    setLive("Live · 10s", "polling");
     pollTimer = setInterval(() => refresh(), 10000);
   }
 
@@ -858,14 +972,24 @@
     }, ms);
   }
 
+  function setDrawerGlyph(fill, statusFill = fill) {
+    const g = $("ddGlyph");
+    if (!g) return;
+    const f = clampPct(fill);
+    g.className = `binGlyph lg ${statusOf(statusFill)}`;
+    const inner = g.querySelector(".binGlyphFill");
+    if (inner) inner.style.height = `${f}%`;
+  }
+
   function ddSetLoading(binId) {
-    safeText("ddTitle", `Bin ${binId}`);
+    safeText("ddTitle", `Cestino ${binId}`);
     safeText("ddSub", "Caricamento…");
+    setDrawerGlyph(0);
     safeText("ddFill", "—");
     safeText("ddWeight", "—");
     safeText("ddCap", "—");
     safeText("ddLast", "—");
-    safeText("ddRangeLabel", `${$("rangeSel").value} giorni`);
+    safeText("ddRangeLabel", `Ultimi ${$("rangeSel").value} giorni`);
 
     const body = $("ddCompartmentsBody");
     if (body) body.innerHTML = "";
@@ -901,39 +1025,31 @@
     if (!comps.length) {
       body.innerHTML = "";
       empty.style.display = "block";
-      empty.textContent = "Nessun dato compartimenti disponibile per questo bin.";
+      empty.textContent = "Nessun dato sugli scomparti disponibile per questo cestino.";
       return;
     }
 
     empty.style.display = "none";
     empty.textContent = "";
 
-    body.innerHTML = comps.map(c => {
+    body.innerHTML = compartmentsSorted(bin).map(c => {
       const fill = getSensorFillPercent(c);
       const state = getSensorState(c);
-      const dist = getSensorDistanceCm(c);
       const cap = numOrNull(c?.capacity_percent);
-      const f = fill !== null ? fill : 0;
-      const barWidth = Math.max(0, Math.min(100, f));
-      const badge = fill !== null ? fillBadge(f) : `<span class="badge bWARN">NO DATA</span>`;
+      const st = fill !== null ? statusOf(fill) : "nodata";
+      const badge = fill !== null ? fillBadge(fill) : `<span class="badge nodata">Nessun dato</span>`;
+      const meta = cap !== null ? `quota ${cap.toFixed(0)}%` : "";
 
       return `
         <div class="compCard">
-          <div class="compCardTop">
+          <div class="compTank ${st}" aria-hidden="true"><i style="height:${fill ?? 0}%"></i></div>
+          <div class="compBody">
             <div>
-              <div class="compTitle">${escapeHtml(c.label || `Scomparto ${c.compartment_id}`)}</div>
-              <div class="compMeta">ID: ${escapeHtml(c.compartment_id ?? "—")} • Quota capacità: ${cap !== null ? `${cap.toFixed(0)}%` : "—"}</div>
+              <div class="compTitle" title="${escapeHtml(c.label || `Scomparto ${c.compartment_id}`)}">${escapeHtml(c.label || `Scomparto ${c.compartment_id}`)}</div>
+              <div class="compMeta" title="${escapeHtml(state ? "Sensore: " + state : "")}">#${escapeHtml(c.compartment_id ?? "—")}${meta ? " · " + meta : ""}</div>
             </div>
-            <div class="fillPill">${fill !== null ? `${Math.round(fill)}%` : "—"}</div>
-          </div>
-
-          <div class="compRow">
-            ${badge}
-            <span class="compTiny">Stato: <b>${escapeHtml(state || "—")}</b></span>
-          </div>
-
-          <div class="compBar">
-            <div style="width:${barWidth}%; background:${barColor(f)}"></div>
+            <div class="compPct">${fill !== null ? `${Math.round(fill)}%` : "—"}</div>
+            <div>${badge}</div>
           </div>
         </div>
       `;
@@ -960,9 +1076,11 @@
       const fillSource = getFillSource(b);
       const comps = getCompartments(b);
 
-      safeText("ddTitle", `Bin ${binId}`);
+      safeText("ddTitle", `Cestino ${binId}`);
+      const sFill = binStatusFill(b);
+      setDrawerGlyph(fill, sFill);
       safeText("ddFill", `${Math.round(fill)}%`);
-      safeHTML("ddFillHint", `${fillBadge(fill)} <span class="muted small">${fillSource === "sensor" ? "totale da scomparti" : "totale stimato"}</span>`);
+      safeHTML("ddFillHint", `${fillBadge(fill)} <span>${fillSource === "sensor" ? "da sensori" : "stimato"}</span>`);
       safeText("ddWeight", formatWeight(wG));
 
       const capKg = capG / 1000;
@@ -972,12 +1090,12 @@
       const ddLast = $("ddLast");
       if (ddLast) ddLast.title = isoToNice(lastSeen);
 
-      safeText(
+      safeHTML(
         "ddSub",
-        `Ultimo update: ${timeAgo(lastSeen)} • ${fill >= thresholds.critical ? "CRITICO" : fill >= thresholds.warn ? "WARNING" : "OK"} • ${fillSource === "sensor" ? `${comps.length} scomparti` : "stima peso/capacità"}`
+        `${fillBadge(sFill)} <span>Ultimo segnale ${escapeHtml(timeAgo(lastSeen))}</span> · <span>${fillSource === "sensor" ? `${comps.length} scompart${comps.length === 1 ? "o" : "i"}` : "stima peso/capacità"}</span>`
       );
 
-      safeText("ddRangeLabel", `${days} giorni`);
+      safeText("ddRangeLabel", `Ultimi ${days} giorni`);
 
       renderCompartments(b);
 
@@ -989,24 +1107,22 @@
 
       const mats = data?.by_material || [];
       if ($("ddPieEmpty")) $("ddPieEmpty").style.display = mats.some(r => Number(r.weight_g || 0) > 0) ? "none" : "block";
-      ddPieChart.data.labels = mats.map(r => r.material);
-      ddPieChart.data.datasets[0].data = mats.map(r => Number(r.weight_g || 0));
-      ddPieChart.update();
+      setDoughnutData(ddPieChart, mats);
 
       const isAdmin = !!data?.is_admin;
       const events = data?.recent_events || [];
 
       if (!adminKey()) {
         $("ddEventsEmpty").style.display = "block";
-        $("ddEventsEmpty").textContent = "🔒 Inserisci e salva la Admin key per vedere gli eventi del bin.";
+        $("ddEventsEmpty").textContent = "Configura la Admin key nelle Impostazioni (icona ingranaggio) per vedere i conferimenti di questo cestino.";
         $("ddEventsBody").innerHTML = "";
       } else if (!isAdmin) {
         $("ddEventsEmpty").style.display = "block";
-        $("ddEventsEmpty").textContent = "❌ Admin key non valida (401).";
+        $("ddEventsEmpty").textContent = "Admin key non valida (401). Aggiornala nelle Impostazioni.";
         $("ddEventsBody").innerHTML = "";
       } else if (!events || events.length === 0) {
         $("ddEventsEmpty").style.display = "block";
-        $("ddEventsEmpty").textContent = "Nessun evento recente per questo bin.";
+        $("ddEventsEmpty").textContent = "Nessun conferimento recente per questo cestino.";
         $("ddEventsBody").innerHTML = "";
       } else {
         $("ddEventsEmpty").style.display = "none";
@@ -1018,9 +1134,9 @@
           return `
             <tr data-eid="${String(eid)}">
               <td class="muted" title="${whenTitle}">${whenHuman}</td>
-              <td>${escapeHtml(e.material)}</td>
-              <td>${formatWeight(e.weight_g)}</td>
-              <td>${formatCO2(e.co2_saved_g)}</td>
+              <td>${materialHTML(e.material)}</td>
+              <td class="right">${formatWeight(e.weight_g)}</td>
+              <td class="right">${formatCO2(e.co2_saved_g)}</td>
               <td class="mono" style="text-align:right" title="${escapeHtml(String(eid))}">${shortId(eid)}</td>
             </tr>
           `;
@@ -1049,7 +1165,7 @@
     const events = dash?.recent_events || [];
 
     if (!adminKey()) {
-      const msg = "🔒 Inserisci e salva la Admin key per vedere gli ultimi eventi.";
+      const msg = "Configura la Admin key nelle Impostazioni (icona ingranaggio) per vedere i conferimenti recenti.";
       if (lastEventsSig !== "NOADMIN") {
         lastEventsSig = "NOADMIN";
         eventsBody.innerHTML = "";
@@ -1060,7 +1176,7 @@
     }
 
     if (!isAdmin) {
-      const msg = "❌ Admin key non valida (401).";
+      const msg = "Admin key non valida (401). Aggiornala nelle Impostazioni.";
       if (lastEventsSig !== "BADADMIN") {
         lastEventsSig = "BADADMIN";
         eventsBody.innerHTML = "";
@@ -1080,7 +1196,7 @@
     if (!events || events.length === 0) {
       eventsBody.innerHTML = "";
       eventsEmpty.style.display = "block";
-      eventsEmpty.textContent = "Nessun evento registrato (ancora).";
+      eventsEmpty.textContent = "Nessun conferimento registrato (ancora).";
       return;
     }
 
@@ -1095,9 +1211,9 @@
         <tr data-eid="${String(eid)}">
           <td class="muted" title="${whenTitle}">${whenHuman}</td>
           <td><b>${escapeHtml(e.bin_id)}</b></td>
-          <td>${escapeHtml(e.material)}</td>
-          <td>${formatWeight(e.weight_g)}</td>
-          <td>${formatCO2(e.co2_saved_g)}</td>
+          <td>${materialHTML(e.material)}</td>
+          <td class="right">${formatWeight(e.weight_g)}</td>
+          <td class="right">${formatCO2(e.co2_saved_g)}</td>
           <td class="mono" style="text-align:right" title="${escapeHtml(String(eid))}">${shortId(eid)}</td>
         </tr>
       `;
@@ -1107,108 +1223,106 @@
   window.__lastCapGByBin = {};
 
   function renderBinsDesktopAndMobile(bins, onlyAlerts) {
-    const binsSig = (onlyAlerts ? "ONLY|" : "ALL|") + bins.map(b =>
+    const binsSig = `${thresholds.warn}|${thresholds.critical}|` + (onlyAlerts ? "ONLY|" : "ALL|") + bins.map(b =>
       `${b.bin_id}|${Number(b.capacity_g || 0)}|${Number(b.current_weight_g || 0)}|${b.last_seen || ""}|${getFillPercent(b)}|${JSON.stringify(getCompartments(b))}`
     ).join(";;");
 
     if (binsSig !== lastBinsSig) {
       lastBinsSig = binsSig;
 
+      const fmtKg = (g) => {
+        const kg = Number(g || 0) / 1000;
+        return isFinite(kg) ? (kg < 100 ? kg.toFixed(1) : Math.round(kg).toString()) + " kg" : "—";
+      };
+
       const rowsHTML = bins.map(b => {
         const fill = getFillPercent(b);
-        const wTxt = formatWeight(b.current_weight_g);
-        const cTxt = formatWeight(b.capacity_g);
-        const sensorMeta = sensorMetaHTML(b);
-        const compPreview = compactCompartmentsHTML(b);
-        const barWidth = Math.max(0, Math.min(100, fill));
-        const lastHuman = timeAgo(b.last_seen);
-        const lastTitle = isoToNice(b.last_seen);
-
-        const capKg = Number(b.capacity_g || 0) / 1000;
-        const capKgTxt = (isFinite(capKg) ? (capKg < 100 ? capKg.toFixed(1) : Math.round(capKg).toString()) : "—");
-
-        const p = priorityOf(fill);
+        const sFill = binStatusFill(b);
+        const p = priorityOf(sFill);
         const priClass = (p === 2) ? "priCritical" : (p === 1) ? "priWarn" : "";
+        const id = escapeHtml(b.bin_id);
+        const source = getFillSource(b) === "sensor" ? "sensori" : "stima";
 
         window.__lastCapGByBin[b.bin_id] = Number(b.capacity_g || 0);
 
         return `
-          <tr id="binrow-${escapeHtml(b.bin_id)}" class="${priClass}" style="cursor:pointer"
-              title="Apri dettagli"
-              onclick="window.__openBin('${String(b.bin_id).replaceAll("'", "\\'")}')">
-            <td>${escapeHtml(b.bin_id)}</td>
-            <td data-col="weight">${wTxt}</td>
-            <td data-col="cap" title="${escapeHtml(cTxt)}">${capKgTxt} kg</td>
-            <td data-col="fill">
-              <div class="fillWrap">
-                <span class="fillPill">${Math.round(fill)}%</span>
-                ${fillBadge(fill)}
-                <span class="bar">
-                  <div style="width:${barWidth}%; background:${barColor(fill)}"></div>
-                </span>
+          <tr id="binrow-${id}" class="${priClass}" data-bin="${id}" title="Apri dettagli">
+            <td>
+              <div class="binCell">
+                ${binGlyphHTML(fill, sFill)}
+                <div>
+                  <div class="binId">${id}</div>
+                  <div class="binMeta">${fillBadge(sFill)}</div>
+                </div>
               </div>
-              ${sensorMeta}
-              ${compPreview}
             </td>
-            <td data-col="last" class="muted" title="${escapeHtml(lastTitle)}">${lastHuman}</td>
+            <td data-col="fill">
+              <div class="fillCell">
+                <span class="fillPct">${Math.round(fill)}%</span>
+                <span class="bar"><div style="width:${clampPct(fill)}%; background:${barColor(fill)}"></div></span>
+              </div>
+              <div class="binMeta">fonte: ${source}</div>
+            </td>
+            <td>${compSummaryHTML(b)}</td>
+            <td class="weightCell" data-col="weight">
+              <b>${formatWeight(b.current_weight_g)}</b> <span class="of">/ ${fmtKg(b.capacity_g)}</span>
+            </td>
+            <td data-col="last" class="lastCell" title="${escapeHtml(isoToNice(b.last_seen))}">${timeAgo(b.last_seen)}</td>
           </tr>
         `;
       }).join("");
 
-      safeHTML("binsBody", rowsHTML || `<tr><td colspan="5" class="muted">Nessun bin da mostrare (filtro attivo).</td></tr>`);
+      const emptyMsg = onlyAlerts ? "Nessun cestino in attenzione. Tutto regolare." : "Nessun cestino registrato.";
+      safeHTML("binsBody", rowsHTML || `<tr class="emptyRow"><td colspan="5">${emptyMsg}</td></tr>`);
 
       const cards = bins.map(b => {
         const fill = getFillPercent(b);
-        const sensorMeta = sensorMetaHTML(b);
-        const compPreview = compactCompartmentsHTML(b);
-        const barWidth = Math.max(0, Math.min(100, fill));
-        const lastHuman = timeAgo(b.last_seen);
-        const lastTitle = isoToNice(b.last_seen);
-
-        const wTxt = formatWeight(b.current_weight_g);
-        const capG = Number(b.capacity_g || 0);
-        const capKg = capG / 1000;
-        const capTxt = isFinite(capKg) ? (capKg < 100 ? capKg.toFixed(1) : Math.round(capKg).toString()) + " kg" : "—";
-
-        const p = priorityOf(fill);
-        const pri = p === 2 ? "CRITICO" : p === 1 ? "WARNING" : "OK";
-
-        window.__lastCapGByBin[b.bin_id] = capG;
+        const sFill = binStatusFill(b);
+        const p = priorityOf(sFill);
+        const priClass = (p === 2) ? "priCritical" : (p === 1) ? "priWarn" : "";
+        const id = escapeHtml(b.bin_id);
 
         return `
-          <div id="bincard-${escapeHtml(b.bin_id)}" class="binCard" onclick="window.__openBin('${String(b.bin_id).replaceAll("'", "\\'")}')">
+          <div id="bincard-${id}" class="binCard ${priClass}" data-bin="${id}">
             <div class="binCardTop">
-              <div>
-                <div class="binCardId">${escapeHtml(b.bin_id)}</div>
-                <div class="binCardMeta" title="${escapeHtml(lastTitle)}">
-                  Ultimo update: <span data-col="last">${lastHuman}</span> • ${pri}
+              <div class="binCell">
+                ${binGlyphHTML(fill, sFill)}
+                <div>
+                  <div class="binId">${id}</div>
+                  <div class="binMeta">${fillBadge(sFill)}</div>
                 </div>
               </div>
-              <div class="fillPill">${Math.round(fill)}%</div>
+              ${compStripHTML(b)}
             </div>
-
-            <div class="binCardFillRow">
-              <div class="binCardFillLeft">
-                ${fillBadge(fill)}
-                <span class="bar">
-                  <div style="width:${barWidth}%; background:${barColor(fill)}"></div>
-                </span>
-              </div>
-              <div class="binCardMeta">
-                ${wTxt} / ${capTxt}
-              </div>
+            <div class="binCardRow">
+              <span class="fillPct">${Math.round(fill)}%</span>
+              <span class="bar"><div style="width:${clampPct(fill)}%; background:${barColor(fill)}"></div></span>
             </div>
-
-            ${sensorMeta}
-            ${compPreview}
+            <div class="binCardFoot">
+              <span><b style="color:var(--text-2)">${formatWeight(b.current_weight_g)}</b> / ${fmtKg(b.capacity_g)}</span>
+              <span title="${escapeHtml(isoToNice(b.last_seen))}">Ultimo segnale <span data-col="last">${timeAgo(b.last_seen)}</span></span>
+            </div>
           </div>
         `;
       }).join("");
 
-      safeHTML("binsCards", cards);
+      safeHTML("binsCards", cards || `<div class="emptyState">${emptyMsg}</div>`);
     }
 
     syncResponsiveBinsView();
+  }
+
+  function updateRangeHints(days) {
+    document.querySelectorAll(".rangeHint").forEach(el => { el.textContent = `Ultimi ${days} giorni`; });
+  }
+
+  function updateKeyStatus() {
+    const a = !!adminKey(), i = !!ingestKey();
+    const as = $("adminKeyStatus"), is = $("ingestKeyStatus");
+    if (as) { as.textContent = a ? "Configurata" : "Non configurata"; as.classList.toggle("on", a); }
+    if (is) { is.textContent = i ? "Configurata" : "Non configurata"; is.classList.toggle("on", i); }
+    const dot = $("keyDot");
+    if (dot) dot.classList.toggle("show", !a);
   }
 
   async function refresh() {
@@ -1221,6 +1335,7 @@
     try {
       clearError();
       const days = Number($("rangeSel").value || 30);
+      updateRangeHints(days);
       const dash = await fetchDashboard(days);
 
       lastIsAdmin = !!dash?.is_admin;
@@ -1232,8 +1347,8 @@
       safeText("binsCount", binsAll.length.toString());
 
       binsAll.sort((a, b) => {
-        const pa = priorityOf(getFillPercent(a));
-        const pb = priorityOf(getFillPercent(b));
+        const pa = priorityOf(binStatusFill(a));
+        const pb = priorityOf(binStatusFill(b));
         if (pa !== pb) return pb - pa;
         return getFillPercent(b) - getFillPercent(a);
       });
@@ -1241,7 +1356,7 @@
       renderQuickAlerts(binsAll);
 
       const onlyAlerts = !!$("onlyAlerts").checked;
-      const bins = onlyAlerts ? binsAll.filter(b => priorityOf(getFillPercent(b)) > 0) : binsAll;
+      const bins = onlyAlerts ? binsAll.filter(b => priorityOf(binStatusFill(b)) > 0) : binsAll;
 
       renderBinsDesktopAndMobile(bins, onlyAlerts);
 
@@ -1259,16 +1374,16 @@
 
       const mats = dash?.by_material || [];
       $("pieEmpty").style.display = mats.some(r => Number(r.weight_g || 0) > 0) ? "none" : "block";
-      doughnutChart.data.labels = mats.map(r => r.material);
-      doughnutChart.data.datasets[0].data = mats.map(r => Number(r.weight_g || 0));
-      doughnutChart.update();
+      setDoughnutData(doughnutChart, mats);
 
       renderRecentEvents(dash);
 
-      safeText("lastUpdated", new Date().toLocaleString());
+      safeText("lastUpdated", new Date().toLocaleTimeString("it-IT", { hour: "2-digit", minute: "2-digit", second: "2-digit" }));
+      const lu = $("lastUpdated");
+      if (lu) lu.title = new Date().toLocaleString("it-IT");
 
       if (drawerOpen && activeBinId) {
-        safeText("ddRangeLabel", `${days} giorni`);
+        safeText("ddRangeLabel", `Ultimi ${days} giorni`);
       }
 
     } catch (e) {
@@ -1283,6 +1398,29 @@
   }
 
   function wireUI() {
+    // Tema
+    $("btnTheme").onclick = () => {
+      const cur = document.documentElement.getAttribute("data-theme") === "dark" ? "dark" : "light";
+      setTheme(cur === "dark" ? "light" : "dark");
+    };
+    if (window.matchMedia) {
+      window.matchMedia("(prefers-color-scheme: dark)").addEventListener?.("change", (e) => {
+        if (!localStorage.getItem(LS_THEME)) setTheme(e.matches ? "dark" : "light", false);
+      });
+    }
+
+    // Impostazioni
+    const settings = $("settingsModal");
+    $("btnSettings").onclick = () => { updateKeyStatus(); settings.showModal(); };
+    $("settingsClose").onclick = () => settings.close();
+    settings.addEventListener("click", (e) => { if (e.target === settings) settings.close(); });
+
+    // Apertura dettaglio cestino (delegation)
+    document.addEventListener("click", (e) => {
+      const el = e.target.closest?.("[data-bin]");
+      if (el && !el.closest("#drawer")) openBinDrawer(el.getAttribute("data-bin"));
+    });
+
     const devWrap = $("devSimWrap");
     if (devWrap) {
       devWrap.style.display = isDevMode() ? "block" : "none";
@@ -1293,7 +1431,8 @@
       if (!v) return await customAlert("Incolla la ADMIN key.", "Errore");
       localStorage.setItem(LS_ADMIN, v);
       $("adminKeyInput").value = "";
-      await customAlert("Admin key salvata con successo ✅", "Successo");
+      updateKeyStatus();
+      await customAlert("Admin key salvata correttamente.", "Salvato");
       refresh();
       if (drawerOpen && activeBinId) openBinDrawer(activeBinId, { soft: true });
     };
@@ -1303,20 +1442,21 @@
       if (!v) return await customAlert("Incolla la INGEST key.", "Errore");
       localStorage.setItem(LS_INGEST, v);
       $("ingestKeyInput").value = "";
-      await customAlert("Ingest key salvata con successo ✅", "Successo");
+      updateKeyStatus();
+      await customAlert("Ingest key salvata correttamente.", "Salvato");
     };
 
     $("btnEditThresholds").onclick = async () => {
-      const w = await customPrompt("Imposta la soglia WARNING (%):", String(thresholds.warn), "Soglie Alert");
+      const w = await customPrompt("Soglia di ATTENZIONE (%):", String(thresholds.warn), "Soglie Alert");
       if (w === null) return;
-      const c = await customPrompt("Imposta la soglia CRITICAL (%):", String(thresholds.critical), "Soglie Alert");
+      const c = await customPrompt("Soglia CRITICA (%):", String(thresholds.critical), "Soglie Alert");
       if (c === null) return;
 
       const wn = Number(String(w).replace(",", ".").trim());
       const cn = Number(String(c).replace(",", ".").trim());
 
       if (!isFinite(wn) || !isFinite(cn) || wn <= 0 || cn <= 0 || wn >= cn || cn > 100) {
-        return await customAlert("Valori non validi.\nRegola: 0 < warn < critical ≤ 100", "Errore");
+        return await customAlert("Valori non validi.\nRegola: 0 < attenzione < critico ≤ 100", "Errore");
       }
       thresholds = { warn: wn, critical: cn };
       saveThresholds();
@@ -1403,6 +1543,7 @@
   document.addEventListener("DOMContentLoaded", () => {
     loadThresholds();
     updateThresholdLabels();
+    updateKeyStatus();
     initCharts();
     wireUI();
     syncResponsiveBinsView();
