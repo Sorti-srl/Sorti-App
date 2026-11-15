@@ -165,7 +165,7 @@
     const agg = aggregateEvents(dash?.recent_events || [], range);
     const notes = [];
     if (!agg.complete) {
-      notes.push(`Il server ha restituito al massimo ${FINE_EVENTS_LIMIT} conferimenti: nel periodo potrebbero essercene altri non inclusi.`);
+      notes.push(`DATO PARZIALE: il server ha restituito solo gli ultimi ${agg.fetched} conferimenti, tutti dentro il periodo; eventuali conferimenti precedenti non sono inclusi. Per un report completo usare un periodo di almeno 24 ore.`);
     }
     const perBin = bins.map(b => {
       const x = agg.byBin.get(String(b.bin_id));
@@ -676,16 +676,23 @@
     if (label) label.textContent = "Generazione…";
     try {
       let dataP;
-      if (range.hours === 24 && !S().adminKey()) {
-        // 24 ore senza Admin key: si usa il dato giornaliero del server
-        dataP = collectData(1).then(d => { d.notes.push("Periodo \"ultime 24 ore\" approssimato con il dato giornaliero del server (manca la Admin key per il dettaglio orario)."); return d; });
+      if (range.hours === 24) {
+        // Il server con days=1 calcola esattamente le ultime 24 ore (totali e materiali per cestino)
+        dataP = collectData(1).then(d => {
+          const end = new Date(), start = new Date(end.getTime() - 24 * 3600000);
+          const t = (x) => x.toLocaleTimeString("it-IT", { hour: "2-digit", minute: "2-digit" });
+          d.start = start; d.end = end; d.stampTime = true;
+          d.periodTxt = `${itDate(start)} ${t(start)} – ${itDate(end)} ${t(end)} (ultime 24 ore)`;
+          d.trendTitle = "Andamento per giorno";
+          return d;
+        });
       } else {
         dataP = range.fine ? collectFineData(range) : collectData(range.days);
       }
       const [data] = await Promise.all([dataP, ensureExcelJS()]);
       const wb = await buildWorkbook(data, orgName);
       const hm = (d) => `${pad(d.getHours())}${pad(d.getMinutes())}`;
-      const stamp = data.fine ? `${ymd(data.start)}_${hm(data.start)}-${hm(data.end)}` : `${ymd(data.start)}_${ymd(data.end)}`;
+      const stamp = (data.fine || data.stampTime) ? `${ymd(data.start)}_${hm(data.start)}-${hm(data.end)}` : `${ymd(data.start)}_${ymd(data.end)}`;
       const name = `Sorti_Report_ESG${orgName ? "_" + slug(orgName) : ""}_${stamp}.xlsx`;
       await downloadWorkbook(wb, name);
     } catch (e) {

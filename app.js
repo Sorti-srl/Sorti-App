@@ -874,7 +874,10 @@
   // --- Periodo selezionato ---
   // Il backend accetta il periodo solo in giorni (dati aggregati per giorno).
   // "Ultima ora" e "Ultime 24 ore" si calcolano dai singoli conferimenti
-  // (disponibili con la Admin key); per le 24 ore, senza Admin key si usa il dato giornaliero.
+  // (disponibili con la Admin key). Per le 24 ore i totali vengono dal server
+  // (days=1 = ultime 24 ore esatte); i conferimenti servono solo per l'andamento orario.
+  // NB: oggi /api/dashboard restituisce al massimo 20 conferimenti e /api/bins/{id} 200:
+  // se l'evento più vecchio ricevuto è dentro la finestra, il dato è parziale.
   const FINE_EVENTS_LIMIT = 1000;
   function getRange() {
     const v = String($("rangeSel")?.value || "30");
@@ -913,10 +916,12 @@
     }
     const total = (events || []).length;
     // Completo se abbiamo visto un evento più vecchio della finestra o se il server ha restituito meno del limite
-    const complete = oldest < cutoff || total < FINE_EVENTS_LIMIT;
+    // Completo solo se abbiamo ricevuto almeno un evento più vecchio della finestra
+    // (oppure nessun evento): il server può troncare la lista sotto il limite richiesto.
+    const complete = total === 0 || oldest < cutoff;
     const label = (t) => new Date(t).toLocaleTimeString("it-IT", { hour: "2-digit", minute: "2-digit" });
     return {
-      weight_g: w, co2_g: co2, count: n, complete, cutoff, now,
+      weight_g: w, co2_g: co2, count: n, complete, fetched: total, cutoff, now,
       buckets: buckets.map(b => ({ ...b, label: label(b.t) })),
       materials: [...byMat.values()].sort((a, b) => b.weight_g - a.weight_g),
       byBin,
@@ -1595,14 +1600,14 @@
 
   function updateRangeHints(range, fineAgg) {
     let txt = range.label;
-    if (range.fine && fineAgg && !fineAgg.complete) txt += ` · ultimi ${FINE_EVENTS_LIMIT} conferimenti`;
-    if (range.hours === 24 && !fineAgg) txt = "Ultimo giorno (dato giornaliero)";
+    if (range.hours === 1 && fineAgg && !fineAgg.complete) txt += ` · parziale (ultimi ${fineAgg.fetched} conferimenti)`;
     if (range.hours === 1 && !fineAgg) txt = "Ultima ora · serve la Admin key";
     document.querySelectorAll(".rangeHint").forEach(el => { el.textContent = txt; });
     const sub = $("trendSub");
-    if (sub) sub.textContent = range.fine && fineAgg ? `valori ogni ${range.bucketMin === 60 ? "ora" : range.bucketMin + " minuti"}` : "valori giornalieri";
+    const fineOk = range.fine && fineAgg && (fineAgg.complete || range.hours === 1);
+    if (sub) sub.textContent = fineOk ? `valori ogni ${range.bucketMin === 60 ? "ora" : range.bucketMin + " minuti"}` : "valori giornalieri";
     const mSub = $("matSub");
-    if (mSub) mSub.textContent = fineAgg ? `Peso per frazione · ${range.label.toLowerCase()}` : "Peso per frazione · storico";
+    if (mSub) mSub.textContent = (fineAgg && fineAgg.complete) ? `Peso per frazione · ${range.label.toLowerCase()}` : "Peso per frazione · storico";
   }
 
   function setKpiUnavailable(id) {
@@ -1665,7 +1670,14 @@
 
       const daily = dash?.daily || [];
       let rangeW, rangeC, series;
-      if (fineAgg) {
+      if (fineAgg && range.hours === 24) {
+        // Totali esatti dal server; andamento orario solo se i conferimenti sono completi
+        rangeW = daily.reduce((s, r) => s + Number(r.weight_g || 0), 0);
+        rangeC = daily.reduce((s, r) => s + Number(r.co2_saved_g || 0), 0);
+        series = fineAgg.complete
+          ? fineAgg.buckets.map(b => ({ label: b.label, v: b.co2_g }))
+          : daily.map(r => ({ label: r.day, v: Number(r.co2_saved_g || 0) }));
+      } else if (fineAgg) {
         rangeW = fineAgg.weight_g;
         rangeC = fineAgg.co2_g;
         series = fineAgg.buckets.map(b => ({ label: b.label, v: b.co2_g }));
@@ -1695,7 +1707,8 @@
       lineChart.data.datasets[0].data = series.map(r => r.v);
       lineChart.update();
 
-      const mats = fineAgg ? fineAgg.materials : (dash?.by_material || []);
+      const useFineMats = fineAgg && fineAgg.complete;
+      const mats = useFineMats ? fineAgg.materials : (dash?.by_material || []);
       $("pieEmpty").style.display = mats.some(r => Number(r.weight_g || 0) > 0) ? "none" : "block";
       setDoughnutData(doughnutChart, mats);
 
