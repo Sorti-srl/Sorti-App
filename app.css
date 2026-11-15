@@ -1078,3 +1078,68 @@ tbody tr:last-child td{ border-bottom:none; }
 }
 [data-theme="glass"] .pageHead .sub{ color:#22324a; font-weight:500; }
 [data-theme="glass"] .pageHead .fieldLabel{ color:#22324a; }
+
+/* =========================================================
+   Anagrafica, svuotamenti, notifiche
+   ========================================================= */
+.binSub{ font-size:11.5px; color:var(--muted); margin-top:1px; max-width:240px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.tileLoc{ font-size:11.5px; color:var(--muted); margin-top:1px; max-width:100%; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.drawerSub .mono{ font-size:11.5px; }
+
+.regNotice{
+  font-size:12.5px; color:var(--muted);
+  padding:10px 12px; border-radius:var(--r-sm);
+  background:var(--surface-2); border:1px dashed var(--border-strong);
+}
+.regNotice.err{ color:var(--crit-ink); border-color: color-mix(in srgb, var(--crit) 40%, transparent); background:var(--crit-soft); }
+.regNotice.warn{ color:var(--warn-ink); border-color: color-mix(in srgb, var(--warn) 40%, transparent); background:var(--warn-soft); margin-top:10px; }
+
+.regGrid{ display:grid; grid-template-columns: 1fr 1fr; gap:2px 18px; margin-bottom:8px; }
+.regRow{ display:flex; flex-direction:column; gap:1px; padding:7px 0; border-bottom:1px solid var(--border); min-width:0; }
+.regRow span{ font-size:11.5px; color:var(--muted); font-weight:600; }
+.regRow b{ font-size:13.5px; font-weight:700; overflow-wrap:anywhere; }
+.regRow b.muted{ font-weight:500; color:var(--muted-2); font-style:italic; }
+.regRow.wide, .regField.wide, .regActions.wide{ grid-column: 1 / -1; }
+@media (max-width:520px){ .regGrid, .regForm{ grid-template-columns:1fr !important; } }
+
+.regForm{ display:grid; grid-template-columns: 1fr 1fr; gap:10px 14px; }
+.regField{ display:flex; flex-direction:column; gap:5px; margin-bottom:10px; }
+.regForm .regField{ margin-bottom:0; }
+.regField span{ font-size:11.5px; font-weight:700; color:var(--muted); }
+.regField input, .regField select, .regField textarea{ width:100%; }
+.regField textarea{
+  padding:9px 12px; border-radius:10px; border:1px solid var(--border-strong);
+  background:var(--surface); color:var(--text); font:inherit; font-size:13.5px; resize:vertical; outline:none;
+}
+.regField textarea:focus{ border-color:var(--brand); box-shadow: 0 0 0 3px color-mix(in srgb, var(--brand) 18%, transparent); }
+.regField select{ min-width:0; }
+.regActions{ display:flex; align-items:center; justify-content:flex-end; gap:8px; margin-top:4px; }
+.regMsg{ margin-right:auto; font-size:12.5px; color:var(--muted); }
+.regMsg.err{ color:var(--crit-ink); }
+.modalHelp{ font-size:12px; color:var(--muted); margin:2px 0 16px; }
+#emptyModal .modalActions{ align-items:center; }
+
+.emptyList{ display:flex; flex-direction:column; }
+.emptyItem{ display:flex; gap:12px; align-items:flex-start; padding:9px 0; border-bottom:1px solid var(--border); }
+.emptyItem:last-child{ border-bottom:none; }
+.emptyIcon{
+  width:28px; height:28px; border-radius:8px; flex:0 0 auto;
+  background: var(--ok-soft); position:relative;
+}
+.emptyIcon::after{
+  content:""; position:absolute; left:10px; top:6px; width:6px; height:11px;
+  border:solid var(--ok); border-width:0 2px 2px 0; transform: rotate(45deg);
+}
+.emptyWhat{ font-weight:700; font-size:13.5px; }
+.emptyMeta{ font-size:12px; color:var(--muted); margin-top:1px; }
+.ddSectionHead .btnSm{ height:30px; }
+
+.notifyLog{ margin:10px 0 0 24px; }
+.notifyLogTitle{ font-size:11.5px; font-weight:700; color:var(--muted); text-transform:uppercase; letter-spacing:.4px; margin-bottom:4px; }
+.notifyItem{ display:flex; gap:10px; align-items:flex-start; padding:6px 0; border-bottom:1px solid var(--border); }
+.notifyItem:last-child{ border-bottom:none; }
+.nDot{ width:8px; height:8px; border-radius:999px; margin-top:6px; background:var(--muted-2); flex:0 0 auto; }
+.notifyItem.sent .nDot{ background:var(--ok); }
+.notifyItem.error .nDot{ background:var(--crit); }
+.nSubj{ font-size:12.5px; font-weight:700; }
+.nMeta{ font-size:11.5px; color:var(--muted); overflow-wrap:anywhere; }

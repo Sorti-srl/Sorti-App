@@ -49,6 +49,8 @@
     const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(s || ""));
     return m ? new Date(+m[1], +m[2] - 1, +m[3]) : null;
   };
+  // ExcelJS scrive le date in UTC: le spostiamo così che Excel mostri l'ora locale (Italia)
+  const xlDate = (d) => (d instanceof Date && !isNaN(d)) ? new Date(d.getTime() - d.getTimezoneOffset() * 60000) : d;
   const slug = (s) => String(s || "").normalize("NFD").replace(/[̀-ͯ]/g, "")
     .replace(/[^a-zA-Z0-9]+/g, "_").replace(/^_|_$/g, "").slice(0, 40);
   const cap = (s) => { const t = String(s || "").trim(); return t ? t[0].toUpperCase() + t.slice(1) : "—"; };
@@ -431,6 +433,7 @@
       ["Tasso di raccolta differenziata", recoveryShare, "%", FMT_PCT],
       ["Emissioni di CO₂e evitate (stima, non deducibile da Scope 1-3)", kg(data.totalCO2), "kg CO₂e", FMT_NUM],
       ["Cestini monitorati", data.bins.length, "n.", "0"],
+      ...(Array.isArray(data.emptyings) ? [["Svuotamenti registrati nel periodo", data.emptyings.length, "n.", "0"]] : []),
       ["Rifiuti raccolti dall'attivazione (storico)", kg(data.allTime.w), "kg", FMT_NUM],
       ["CO₂e evitata dall'attivazione (storico, stima)", kg(data.allTime.co2), "kg CO₂e", FMT_NUM],
     ];
@@ -556,7 +559,7 @@
     tableHeader(h4);
     const firstDataRow = 5;
     data.daily.forEach((d, i) => {
-      const row = w4.addRow([d.date || d.day, kg(d.weight_g), kg(d.co2_g)]);
+      const row = w4.addRow([d.date ? xlDate(d.date) : d.day, kg(d.weight_g), kg(d.co2_g)]);
       if (d.date) row.getCell(1).numFmt = data.fine ? "dd/mm/yyyy hh:mm" : "dd/mm/yyyy";
       row.getCell(2).numFmt = FMT_KG; row.getCell(3).numFmt = FMT_KG;
       bodyRow(row, i % 2 === 1);
@@ -570,10 +573,10 @@
 
     // ===== 5. Cestini =====
     const w5 = wb.addWorksheet("Cestini", { views: [{ showGridLines: false, state: "frozen", ySplit: 4 }] });
-    w5.columns = [{ width: 22 }, { width: 18 }, { width: 18 }, { width: 16 }, { width: 14 }, { width: 18 }, { width: 22 }];
-    sheetHeader(w5, "Dettaglio per cestino", `Periodo: ${periodTxt} · stato al ${genTxt}`, 7);
+    w5.columns = [{ width: 26 }, { width: 16 }, { width: 30 }, { width: 22 }, { width: 18 }, { width: 18 }, { width: 14 }, { width: 13 }, { width: 16 }, { width: 20 }];
+    sheetHeader(w5, "Dettaglio per cestino", `Periodo: ${periodTxt} · stato al ${genTxt}`, 10);
     const h5 = w5.getRow(4);
-    h5.values = ["Cestino", "Rifiuti nel periodo (kg)", "CO₂e evitata (kg)", "Riempimento attuale", "Stato", "Capacità (kg)", "Ultimo conferimento"];
+    h5.values = ["Cestino", "Codice", "Posizione", "Cliente", "Rifiuti nel periodo (kg)", "CO₂e evitata (kg)", "Riempimento attuale", "Stato", "Capacità (kg)", "Ultimo conferimento"];
     tableHeader(h5);
     data.perBin.forEach((p, i) => {
       const b = p.bin;
@@ -581,19 +584,45 @@
       const st = S().statusOf(S().binStatusFill(b));
       const last = S().isoToDate(b.last_seen);
       const row = w5.addRow([
-        b.bin_id,
+        b.name || b.bin_id, b.bin_id, b.location || "", b.organization || "",
         p.weight_g === null ? "n.d." : kg(p.weight_g),
         p.co2_g === null ? "n.d." : kg(p.co2_g),
-        fill, S().STATUS_LABEL[st], kg(b.capacity_g), last || "—"
+        fill, S().STATUS_LABEL[st], kg(b.capacity_g), last ? xlDate(last) : "—"
       ]);
-      row.getCell(2).numFmt = FMT_KG; row.getCell(3).numFmt = FMT_KG; row.getCell(4).numFmt = "0%";
-      row.getCell(6).numFmt = FMT_KG;
-      if (last) row.getCell(7).numFmt = "dd/mm/yyyy hh:mm";
+      row.getCell(5).numFmt = FMT_KG; row.getCell(6).numFmt = FMT_KG; row.getCell(7).numFmt = "0%";
+      row.getCell(9).numFmt = FMT_KG;
+      if (last) row.getCell(10).numFmt = "dd/mm/yyyy hh:mm";
       bodyRow(row, i % 2 === 1);
       row.getCell(1).font = { bold: true };
       const stColor = st === "crit" ? "FFC0272D" : st === "warn" ? "FF8F6400" : "FF137A3A";
-      row.getCell(5).font = { bold: true, color: { argb: stColor } };
+      row.getCell(8).font = { bold: true, color: { argb: stColor } };
     });
+
+    // ===== 5b. Svuotamenti (se disponibili) =====
+    if (Array.isArray(data.emptyings)) {
+      const wE = wb.addWorksheet("Svuotamenti", { views: [{ showGridLines: false, state: "frozen", ySplit: 4 }] });
+      wE.columns = [{ width: 18 }, { width: 26 }, { width: 22 }, { width: 22 }, { width: 16 }, { width: 50 }];
+      sheetHeader(wE, "Registro degli svuotamenti", `Periodo: ${periodTxt} · ${data.emptyings.length} svuotamenti registrati`, 6);
+      const hE = wE.getRow(4);
+      hE.values = ["Data e ora", "Cestino", "Scomparto", "Operatore", "Livello prima", "Note"];
+      tableHeader(hE);
+      if (!data.emptyings.length) {
+        const r0 = wE.addRow(["Nessuno svuotamento registrato nel periodo"]);
+        r0.getCell(1).font = { italic: true, color: { argb: C.muted } };
+      }
+      const binsById = Object.fromEntries((data.bins || []).map(b => [b.bin_id, b]));
+      data.emptyings.forEach((e, i) => {
+        const b = binsById[e.bin_id];
+        const comp = e.compartment_id == null ? "Tutto il cestino"
+          : ((b?.compartments || []).find(c => String(c.compartment_id) === String(e.compartment_id))?.label || `Scomparto ${e.compartment_id}`);
+        const when = S().isoToDate(e.ts);
+        const row = wE.addRow([when ? xlDate(when) : e.ts, b?.name || e.bin_id, comp, e.emptied_by || "—",
+          e.fill_before_percent != null ? e.fill_before_percent / 100 : "—", e.note || ""]);
+        if (when) row.getCell(1).numFmt = "dd/mm/yyyy hh:mm";
+        if (e.fill_before_percent != null) row.getCell(5).numFmt = "0%";
+        bodyRow(row, i % 2 === 1);
+      });
+    }
 
     // ===== 6. Metodologia =====
     const w6 = wb.addWorksheet("Metodologia", { views: [{ showGridLines: false }] });
@@ -657,6 +686,21 @@
     setTimeout(() => URL.revokeObjectURL(a.href), 2000);
   }
 
+  // Registro svuotamenti (server v2 + Admin key); senza, il foglio non viene creato
+  async function attachEmptyings(data) {
+    const { apiUrl, fetchJSON, adminKey } = S();
+    if (!adminKey()) return;
+    const info = await (window.__sortiRegistry?.serverInfo?.() || Promise.resolve({ v2: false }));
+    if (!info.v2) return;
+    try {
+      const list = await fetchJSON(apiUrl(`/api/emptyings?days=${Math.max(1, data.days || 1)}`), { headers: { "X-API-Key": adminKey() } });
+      const from = data.start instanceof Date ? data.start.getTime() : 0;
+      data.emptyings = (Array.isArray(list) ? list : []).filter(e => (S().isoToDate(e.ts)?.getTime() || 0) >= from);
+    } catch (e) {
+      data.notes.push("Registro svuotamenti non disponibile: " + (e?.message || e).toString().split("\n")[0]);
+    }
+  }
+
   // ---------- Avvio ----------
   async function generateEsgReport(btn) {
     const { customAlert, customPrompt, getRange } = S();
@@ -690,6 +734,7 @@
         dataP = range.fine ? collectFineData(range) : collectData(range.days);
       }
       const [data] = await Promise.all([dataP, ensureExcelJS()]);
+      await attachEmptyings(data);
       const wb = await buildWorkbook(data, orgName);
       const hm = (d) => `${pad(d.getHours())}${pad(d.getMinutes())}`;
       const stamp = (data.fine || data.stampTime) ? `${ymd(data.start)}_${hm(data.start)}-${hm(data.end)}` : `${ymd(data.start)}_${ymd(data.end)}`;
