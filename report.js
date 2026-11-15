@@ -424,7 +424,7 @@
     });
     kh.height = 24;
     const kpis = [
-      ["Rifiuti raccolti nel periodo (GRI 306-3)", kg(data.totalW), "kg", FMT_NUM],
+      ["Rifiuti raccolti nel periodo, stima (GRI 306-3)", kg(data.totalW), "kg", FMT_NUM],
       ["  di cui con destinazione prevista a recupero (GRI 306-4)", kg(groups.recovery), "kg", FMT_NUM],
       ["  di cui con destinazione prevista a smaltimento (GRI 306-5)", kg(groups.disposal), "kg", FMT_NUM],
       ...(groups.unclassified > 0 ? [["  di cui da classificare", kg(groups.unclassified), "kg", FMT_NUM]] : []),
@@ -475,7 +475,7 @@
       put(r, 2, "Nessun dato sui materiali nel periodo.", { font: { italic: true, color: { argb: C.muted } } });
       r += 2;
     }
-    put(r, 2, "Le destinazioni sono previste in base alla frazione raccolta e vanno confermate con il gestore dei rifiuti. Vedi il foglio “Metodologia”.",
+    put(r, 2, "I pesi sono stimati (peso standard per conferimento) e le destinazioni sono previste in base alla frazione raccolta: vedi il foglio “Metodologia”.",
       { font: { italic: true, size: 9, color: { argb: C.muted } } });
 
     // ===== 2. Rifiuti (GRI 306 · ESRS E5) =====
@@ -517,7 +517,7 @@
       bodyRow(row, i % 2 === 1);
     });
     w2.addRow([]);
-    const n2 = w2.addRow(["Nota: Sorti misura i rifiuti conferiti e separati alla fonte. L'effettivo avvio a riciclo/recupero e la sede delle operazioni (in sito / fuori sito, GRI 306-4c e 306-5c) devono essere confermati dai formulari o dalle dichiarazioni del gestore."]);
+    const n2 = w2.addRow(["Nota: i pesi sono stimati con un peso standard per conferimento (vedi Metodologia). Sorti registra i rifiuti conferiti e separati alla fonte. L'effettivo avvio a riciclo/recupero e la sede delle operazioni (in sito / fuori sito, GRI 306-4c e 306-5c) devono essere confermati dai formulari o dalle dichiarazioni del gestore."]);
     w2.mergeCells(n2.number, 1, n2.number, 7);
     n2.getCell(1).font = { italic: true, size: 9, color: { argb: C.muted } };
     n2.getCell(1).alignment = { wrapText: true, vertical: "top" };
@@ -600,7 +600,8 @@
     w6.columns = [{ width: 30 }, { width: 100 }];
     sheetHeader(w6, "Metodologia, ipotesi e limiti", "Da allegare al report per garantire trasparenza e verificabilità dei dati.", 2);
     const meth = [
-      ["Fonte dei dati", "Dati misurati dai cestini intelligenti Sorti: ogni conferimento viene riconosciuto (frazione) e pesato dal dispositivo e registrato con data e ora."],
+      ["Fonte dei dati", "Dati raccolti dai cestini intelligenti Sorti: ogni conferimento viene riconosciuto (frazione) dal sistema di visione del dispositivo e registrato con data e ora."],
+      ["Peso dei rifiuti (stima)", "Nella configurazione attuale i cestini non dispongono di una bilancia: a ogni conferimento è associato un peso standard configurato sul dispositivo. I pesi e le emissioni evitate riportati sono quindi STIME proporzionali al numero di conferimenti e vanno dichiarati come tali. Il dato misurato direttamente è il numero di conferimenti per frazione."],
       ["Perimetro", `${data.bins.length} cestini Sorti dell'organizzazione. Il report copre solo i rifiuti conferiti in questi cestini, non la totalità dei rifiuti prodotti dall'organizzazione.`],
       ["Periodo", periodTxt],
       ["GRI 306-3 · ESRS E5-5 (37a)", "Rifiuti generati: somma dei pesi registrati nel periodo, espressi in kg e tonnellate."],
@@ -608,7 +609,7 @@
       ["GRI 306-5 · ESRS E5-5 (37c)", "Rifiuti destinati allo smaltimento: frazione indifferenziata/residua, con destinazione PREVISTA a termovalorizzazione o discarica."],
       ["Destinazione effettiva", "Il sistema registra la separazione alla fonte. L'effettivo trattamento a valle (riciclo, recupero, smaltimento) e la sede delle operazioni vanno confermati con formulari di identificazione rifiuti, MUD o dichiarazioni del gestore."],
       ["Pericolosità", "Le frazioni raccolte sono assunte come rifiuti urbani non pericolosi. Verificare eventuali flussi pericolosi (es. RAEE, pile) gestiti separatamente."],
-      ["Emissioni evitate", "Stima calcolata dal sistema Sorti applicando fattori di emissione per frazione al peso conferito. Sono emissioni evitate rispetto a uno scenario di riferimento: secondo GHG Protocol, GRI 305 ed ESRS E1 vanno riportate separatamente e non possono essere sottratte dalle emissioni Scope 1, 2 o 3."],
+      ["Emissioni evitate", "Stima calcolata dal sistema Sorti applicando fattori di emissione per frazione al peso stimato dei conferimenti (vedi “Peso dei rifiuti”). Sono emissioni evitate rispetto a uno scenario di riferimento: secondo GHG Protocol, GRI 305 ed ESRS E1 vanno riportate separatamente e non possono essere sottratte dalle emissioni Scope 1, 2 o 3."],
       ["Fattori di emissione", "Indicare qui la fonte dei fattori utilizzati dal backend Sorti (es. database ISPRA, DEFRA, Ecoinvent) e l'anno di riferimento, prima della pubblicazione."],
       ["Stato dei cestini", "Riempimento e stato sono istantanei, rilevati al momento della generazione del report."],
       ["Strumento", "Report generato automaticamente da Sorti SmartBin Console. I valori sono arrotondati al grammo."],
