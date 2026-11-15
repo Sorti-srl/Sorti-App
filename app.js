@@ -871,9 +871,61 @@
     retintCharts();
   }
 
-  async function fetchDashboard(days) {
+  // --- Periodo selezionato ---
+  // Il backend accetta il periodo solo in giorni (dati aggregati per giorno).
+  // "Ultima ora" e "Ultime 24 ore" si calcolano dai singoli conferimenti
+  // (disponibili con la Admin key); per le 24 ore, senza Admin key si usa il dato giornaliero.
+  const FINE_EVENTS_LIMIT = 1000;
+  function getRange() {
+    const v = String($("rangeSel")?.value || "30");
+    if (v === "1h") return { key: v, days: 1, hours: 1, fine: true, label: "Ultima ora", bucketMin: 5 };
+    if (v === "24h") return { key: v, days: 1, hours: 24, fine: true, label: "Ultime 24 ore", bucketMin: 60 };
+    const d = Math.max(1, Math.min(365, Number(v) || 30));
+    return { key: v, days: d, hours: null, fine: false, label: `Ultimi ${d} giorni`, bucketMin: null };
+  }
+
+  // Aggrega i conferimenti nella finestra [ora - hours, ora]
+  function aggregateEvents(events, range, now = Date.now()) {
+    const cutoff = now - range.hours * 3600000;
+    const bucketMs = range.bucketMin * 60000;
+    const start = Math.floor(cutoff / bucketMs) * bucketMs;
+    const nB = Math.max(1, Math.ceil((now + 1 - start) / bucketMs));
+    const buckets = Array.from({ length: nB }, (_, i) => ({ t: start + i * bucketMs, weight_g: 0, co2_g: 0, count: 0 }));
+    const byMat = new Map();
+    const byBin = new Map();
+    let w = 0, co2 = 0, n = 0, oldest = Infinity;
+
+    for (const e of events || []) {
+      const t = isoToDate(e.ts)?.getTime();
+      if (!t) continue;
+      if (t < oldest) oldest = t;
+      if (t < cutoff || t > now + 60000) continue;
+      const ew = Number(e.weight_g || 0), ec = Number(e.co2_saved_g || 0);
+      w += ew; co2 += ec; n++;
+      const bi = Math.min(nB - 1, Math.max(0, Math.floor((t - start) / bucketMs)));
+      buckets[bi].weight_g += ew; buckets[bi].co2_g += ec; buckets[bi].count++;
+      const mk = String(e.material || "non specificato").trim().toLowerCase();
+      const m = byMat.get(mk) || { material: mk, weight_g: 0, co2_saved_g: 0 };
+      m.weight_g += ew; m.co2_saved_g += ec; byMat.set(mk, m);
+      const bk = String(e.bin_id || "—");
+      const bb = byBin.get(bk) || { weight_g: 0, co2_g: 0, count: 0 };
+      bb.weight_g += ew; bb.co2_g += ec; bb.count++; byBin.set(bk, bb);
+    }
+    const total = (events || []).length;
+    // Completo se abbiamo visto un evento più vecchio della finestra o se il server ha restituito meno del limite
+    const complete = oldest < cutoff || total < FINE_EVENTS_LIMIT;
+    const label = (t) => new Date(t).toLocaleTimeString("it-IT", { hour: "2-digit", minute: "2-digit" });
+    return {
+      weight_g: w, co2_g: co2, count: n, complete, cutoff, now,
+      buckets: buckets.map(b => ({ ...b, label: label(b.t) })),
+      materials: [...byMat.values()].sort((a, b) => b.weight_g - a.weight_g),
+      byBin,
+    };
+  }
+
+  async function fetchDashboard(days, eventsLimit = 20) {
     const d = Math.max(1, Math.min(365, Number(days || 30)));
-    const url = apiUrl(`/api/dashboard?days=${encodeURIComponent(d)}&events_limit=20`);
+    const url = apiUrl(`/api/dashboard?days=${encodeURIComponent(d)}&events_limit=${encodeURIComponent(eventsLimit)}`);
     const headers = {};
     if (adminKey()) headers["X-API-Key"] = adminKey();
     return await fetchJSON(url, { headers });
@@ -997,7 +1049,7 @@
     safeText("ddWeight", "—");
     safeText("ddCap", "—");
     safeText("ddLast", "—");
-    safeText("ddRangeLabel", `Ultimi ${$("rangeSel").value} giorni`);
+    safeText("ddRangeLabel", getRange().label);
 
     const body = $("ddCompartmentsBody");
     if (body) body.innerHTML = "";
@@ -1068,14 +1120,17 @@
   async function openBinDrawer(binId, { soft = false } = {}) {
     try {
       activeBinId = binId;
-      const days = Number($("rangeSel").value || 30);
+      const range = getRange();
+      const days = range.days;
+      const wantFine = range.fine && !!adminKey();
 
       if (!soft) {
         ddSetLoading(binId);
         openDrawer();
       }
 
-      const data = await fetchBinDetail(binId, days, 20);
+      const data = await fetchBinDetail(binId, days, wantFine ? FINE_EVENTS_LIMIT : 20);
+      const ddAgg = (wantFine && data?.is_admin) ? aggregateEvents(data?.recent_events || [], range) : null;
       const b = data?.bin || {};
 
       const fill = getFillPercent(b);
@@ -1104,22 +1159,31 @@
         `${fillBadge(sFill)} <span>Ultimo segnale ${escapeHtml(timeAgo(lastSeen))}</span> · <span>${fillSource === "sensor" ? `${comps.length} scompart${comps.length === 1 ? "o" : "i"}` : "stima peso/capacità"}</span>`
       );
 
-      safeText("ddRangeLabel", `Ultimi ${days} giorni`);
+      safeText("ddRangeLabel", range.label);
 
       renderCompartments(b);
 
       const daily = data?.daily || [];
-      if ($("ddLineEmpty")) $("ddLineEmpty").style.display = daily.some(r => Number(r.co2_saved_g || 0) > 0) ? "none" : "block";
-      ddLineChart.data.labels = daily.map(r => r.day);
-      ddLineChart.data.datasets[0].data = daily.map(r => Number(r.co2_saved_g || 0));
+      const ddSeries = ddAgg
+        ? ddAgg.buckets.map(x => ({ label: x.label, v: x.co2_g }))
+        : (range.hours === 1 ? [] : daily.map(r => ({ label: r.day, v: Number(r.co2_saved_g || 0) })));
+      const ddLineEmpty = $("ddLineEmpty");
+      if (ddLineEmpty) {
+        ddLineEmpty.style.display = ddSeries.some(r => r.v > 0) ? "none" : "block";
+        ddLineEmpty.textContent = (range.hours === 1 && !ddAgg)
+          ? "Per la vista \"Ultima ora\" serve la Admin key."
+          : "Nessun dato nel periodo selezionato.";
+      }
+      ddLineChart.data.labels = ddSeries.map(r => r.label);
+      ddLineChart.data.datasets[0].data = ddSeries.map(r => r.v);
       ddLineChart.update();
 
-      const mats = data?.by_material || [];
+      const mats = ddAgg ? ddAgg.materials : (data?.by_material || []);
       if ($("ddPieEmpty")) $("ddPieEmpty").style.display = mats.some(r => Number(r.weight_g || 0) > 0) ? "none" : "block";
       setDoughnutData(ddPieChart, mats);
 
       const isAdmin = !!data?.is_admin;
-      const events = data?.recent_events || [];
+      const events = (data?.recent_events || []).slice(0, 20);
 
       if (!adminKey()) {
         $("ddEventsEmpty").style.display = "block";
@@ -1171,7 +1235,7 @@
     if (!eventsBody || !eventsEmpty) return;
 
     const isAdmin = !!dash?.is_admin;
-    const events = dash?.recent_events || [];
+    const events = (dash?.recent_events || []).slice(0, 20);
 
     if (!adminKey()) {
       const msg = "Configura la Admin key nelle Impostazioni (icona ingranaggio) per vedere i conferimenti recenti.";
@@ -1350,6 +1414,7 @@
   let knownBins = null;            // Set dei cestini già visti (persistente)
   let prevWeights = null;          // bin_id -> peso al refresh precedente
   let seenEventIds = null;         // id eventi già visti
+  let lastEventTs = 0;             // timestamp del conferimento più recente già visto
   const freshBins = new Map();     // bin_id -> "new" | "event", per l'evidenziazione
 
   function markFresh(binId, kind) {
@@ -1388,7 +1453,9 @@
     if (events) {
       const ids = events.map(e => String(e.id ?? `${e.ts}|${e.bin_id}`));
       if (seenEventIds) {
-        const fresh = events.filter((e, i) => !seenEventIds.has(ids[i])).slice(0, 3).reverse();
+        // Solo conferimenti davvero nuovi: mai visti E più recenti dell'ultimo noto
+        // (cambiando periodo la dashboard scarica anche eventi più vecchi)
+        const fresh = events.filter((e, i) => !seenEventIds.has(ids[i]) && (isoToDate(e.ts)?.getTime() || 0) > lastEventTs).slice(0, 3).reverse();
         for (const e of fresh) {
           notifiedBins.add(e.bin_id);
           if (freshBins.get(String(e.bin_id)) !== "new") markFresh(e.bin_id, "event");
@@ -1400,6 +1467,10 @@
         }
       }
       seenEventIds = new Set(ids);
+      for (const e of events) {
+        const t = isoToDate(e.ts)?.getTime() || 0;
+        if (t > lastEventTs) lastEventTs = t;
+      }
     }
 
     const weights = {};
@@ -1522,8 +1593,25 @@
     syncResponsiveBinsView();
   }
 
-  function updateRangeHints(days) {
-    document.querySelectorAll(".rangeHint").forEach(el => { el.textContent = `Ultimi ${days} giorni`; });
+  function updateRangeHints(range, fineAgg) {
+    let txt = range.label;
+    if (range.fine && fineAgg && !fineAgg.complete) txt += ` · ultimi ${FINE_EVENTS_LIMIT} conferimenti`;
+    if (range.hours === 24 && !fineAgg) txt = "Ultimo giorno (dato giornaliero)";
+    if (range.hours === 1 && !fineAgg) txt = "Ultima ora · serve la Admin key";
+    document.querySelectorAll(".rangeHint").forEach(el => { el.textContent = txt; });
+    const sub = $("trendSub");
+    if (sub) sub.textContent = range.fine && fineAgg ? `valori ogni ${range.bucketMin === 60 ? "ora" : range.bucketMin + " minuti"}` : "valori giornalieri";
+    const mSub = $("matSub");
+    if (mSub) mSub.textContent = fineAgg ? `Peso per frazione · ${range.label.toLowerCase()}` : "Peso per frazione · storico";
+  }
+
+  function setKpiUnavailable(id) {
+    const el = $(id);
+    if (!el) return;
+    el.classList.remove("skeleton");
+    el.textContent = "—";
+    el.title = "Serve la Admin key per i dati dell'ultima ora";
+    delete kpiValues[id];
   }
 
   function updateKeyStatus() {
@@ -1544,9 +1632,12 @@
 
     try {
       clearError();
-      const days = Number($("rangeSel").value || 30);
-      updateRangeHints(days);
-      const dash = await fetchDashboard(days);
+      const range = getRange();
+      const days = range.days;
+      const wantFine = range.fine && !!adminKey();
+      const dash = await fetchDashboard(days, wantFine ? FINE_EVENTS_LIMIT : 20);
+      const fineAgg = (wantFine && dash?.is_admin) ? aggregateEvents(dash?.recent_events || [], range) : null;
+      updateRangeHints(range, fineAgg);
 
       lastIsAdmin = !!dash?.is_admin;
 
@@ -1573,18 +1664,38 @@
       renderBinsDesktopAndMobile(bins, onlyAlerts);
 
       const daily = dash?.daily || [];
-      const rangeW = daily.reduce((s, r) => s + Number(r.weight_g || 0), 0);
-      const rangeC = daily.reduce((s, r) => s + Number(r.co2_saved_g || 0), 0);
+      let rangeW, rangeC, series;
+      if (fineAgg) {
+        rangeW = fineAgg.weight_g;
+        rangeC = fineAgg.co2_g;
+        series = fineAgg.buckets.map(b => ({ label: b.label, v: b.co2_g }));
+      } else if (range.hours === 1) {
+        // Ultima ora senza Admin key: dato non disponibile
+        rangeW = null; rangeC = null; series = [];
+      } else {
+        rangeW = daily.reduce((s, r) => s + Number(r.weight_g || 0), 0);
+        rangeC = daily.reduce((s, r) => s + Number(r.co2_saved_g || 0), 0);
+        series = daily.map(r => ({ label: r.day, v: Number(r.co2_saved_g || 0) }));
+      }
 
-      animateNumber("kpiRangeWeight", rangeW, formatWeight);
-      animateNumber("kpiRangeCO2", rangeC, formatCO2);
+      if (rangeW === null) {
+        setKpiUnavailable("kpiRangeWeight");
+        setKpiUnavailable("kpiRangeCO2");
+      } else {
+        animateNumber("kpiRangeWeight", rangeW, formatWeight);
+        animateNumber("kpiRangeCO2", rangeC, formatCO2);
+      }
 
-      $("lineEmpty").style.display = daily.some(r => Number(r.co2_saved_g || 0) > 0) ? "none" : "block";
-      lineChart.data.labels = daily.map(r => r.day);
-      lineChart.data.datasets[0].data = daily.map(r => Number(r.co2_saved_g || 0));
+      const lineEmpty = $("lineEmpty");
+      lineEmpty.style.display = series.some(r => r.v > 0) ? "none" : "block";
+      lineEmpty.textContent = (range.hours === 1 && !fineAgg)
+        ? "Per la vista \"Ultima ora\" serve la Admin key: i dati orari si calcolano dai singoli conferimenti."
+        : "Nessun dato nel periodo selezionato.";
+      lineChart.data.labels = series.map(r => r.label);
+      lineChart.data.datasets[0].data = series.map(r => r.v);
       lineChart.update();
 
-      const mats = dash?.by_material || [];
+      const mats = fineAgg ? fineAgg.materials : (dash?.by_material || []);
       $("pieEmpty").style.display = mats.some(r => Number(r.weight_g || 0) > 0) ? "none" : "block";
       setDoughnutData(doughnutChart, mats);
 
@@ -1595,7 +1706,7 @@
       if (lu) lu.title = new Date().toLocaleString("it-IT");
 
       if (drawerOpen && activeBinId) {
-        safeText("ddRangeLabel", `Ultimi ${days} giorni`);
+        safeText("ddRangeLabel", range.label);
       }
 
     } catch (e) {
@@ -1795,7 +1906,8 @@
     apiUrl, fetchJSON, adminKey, formatWeight, materialColor, statusOf,
     getFillPercent, binStatusFill, getFillSource, getCompartments, isoToDate,
     customAlert, customPrompt, STATUS_LABEL,
-    getRangeDays: () => Number($("rangeSel").value || 30),
+    getRangeDays: () => getRange().days,
+    getRange, aggregateEvents, FINE_EVENTS_LIMIT,
   };
 
   document.addEventListener("DOMContentLoaded", () => {
