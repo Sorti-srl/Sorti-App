@@ -229,6 +229,21 @@
     return str.slice(0, 8) + "…" + str.slice(-6);
   }
 
+  // Anagrafica: nome leggibile del cestino (se impostato), altrimenti il codice
+  const binsById = {};
+  function binTitle(binOrId) {
+    const b = typeof binOrId === "string" ? binsById[binOrId] : binOrId;
+    const id = typeof binOrId === "string" ? binOrId : binOrId?.bin_id;
+    return (b && b.name) ? b.name : (id || "—");
+  }
+  function binSubtitle(b) {
+    if (!b) return "";
+    const parts = [];
+    if (b.name) parts.push(b.bin_id);
+    if (b.location) parts.push(b.location);
+    return parts.join(" · ");
+  }
+
   function getCompartments(obj) {
     const arr = obj?.compartments;
     return Array.isArray(arr) ? arr : [];
@@ -526,7 +541,7 @@
     const html = items.slice(0, MAX).map(x => `
       <button type="button" class="alertItem ${x._p}" data-bin="${escapeHtml(x.bin_id)}" title="Apri dettagli cestino">
         <div class="aMain">
-          <div class="aBin">${escapeHtml(x.bin_id)}</div>
+          <div class="aBin">${escapeHtml(binTitle(x.bin_id))}</div>
           <div class="aComp">${escapeHtml(x.label)} · ${x._p === "crit" ? "critico" : "attenzione"}</div>
         </div>
         <div class="aPct">${Math.round(x.fill)}%</div>
@@ -874,7 +889,10 @@
   // --- Periodo selezionato ---
   // Il backend accetta il periodo solo in giorni (dati aggregati per giorno).
   // "Ultima ora" e "Ultime 24 ore" si calcolano dai singoli conferimenti
-  // (disponibili con la Admin key); per le 24 ore, senza Admin key si usa il dato giornaliero.
+  // (disponibili con la Admin key). Per le 24 ore i totali vengono dal server
+  // (days=1 = ultime 24 ore esatte); i conferimenti servono solo per l'andamento orario.
+  // NB: oggi /api/dashboard restituisce al massimo 20 conferimenti e /api/bins/{id} 200:
+  // se l'evento più vecchio ricevuto è dentro la finestra, il dato è parziale.
   const FINE_EVENTS_LIMIT = 1000;
   function getRange() {
     const v = String($("rangeSel")?.value || "30");
@@ -913,10 +931,12 @@
     }
     const total = (events || []).length;
     // Completo se abbiamo visto un evento più vecchio della finestra o se il server ha restituito meno del limite
-    const complete = oldest < cutoff || total < FINE_EVENTS_LIMIT;
+    // Completo solo se abbiamo ricevuto almeno un evento più vecchio della finestra
+    // (oppure nessun evento): il server può troncare la lista sotto il limite richiesto.
+    const complete = total === 0 || oldest < cutoff;
     const label = (t) => new Date(t).toLocaleTimeString("it-IT", { hour: "2-digit", minute: "2-digit" });
     return {
-      weight_g: w, co2_g: co2, count: n, complete, cutoff, now,
+      weight_g: w, co2_g: co2, count: n, complete, fetched: total, cutoff, now,
       buckets: buckets.map(b => ({ ...b, label: label(b.t) })),
       materials: [...byMat.values()].sort((a, b) => b.weight_g - a.weight_g),
       byBin,
@@ -1042,7 +1062,7 @@
   }
 
   function ddSetLoading(binId) {
-    safeText("ddTitle", `Cestino ${binId}`);
+    safeText("ddTitle", binsById[binId]?.name || `Cestino ${binId}`);
     safeText("ddSub", "Caricamento…");
     setDrawerGlyph(0);
     safeText("ddFill", "—");
@@ -1140,7 +1160,8 @@
       const fillSource = getFillSource(b);
       const comps = getCompartments(b);
 
-      safeText("ddTitle", `Cestino ${binId}`);
+      binsById[binId] = Object.assign({}, binsById[binId] || {}, b);
+      safeText("ddTitle", b.name ? b.name : `Cestino ${binId}`);
       const sFill = binStatusFill(b);
       setDrawerGlyph(fill, sFill);
       safeText("ddFill", `${Math.round(fill)}%`);
@@ -1156,12 +1177,13 @@
 
       safeHTML(
         "ddSub",
-        `${fillBadge(sFill)} <span>Ultimo segnale ${escapeHtml(timeAgo(lastSeen))}</span> · <span>${fillSource === "sensor" ? `${comps.length} scompart${comps.length === 1 ? "o" : "i"}` : "stima peso/capacità"}</span>`
+        `${fillBadge(sFill)} ${b.name ? `<span class="mono">${escapeHtml(binId)}</span> · ` : ""}${b.location ? `<span>${escapeHtml(b.location)}</span> · ` : ""}<span>Ultimo segnale ${escapeHtml(timeAgo(lastSeen))}</span> · <span>${fillSource === "sensor" ? `${comps.length} scompart${comps.length === 1 ? "o" : "i"}` : "stima peso/capacità"}</span>`
       );
 
       safeText("ddRangeLabel", range.label);
 
       renderCompartments(b);
+      try { window.__sortiRegistry?.renderDrawer(b, { soft }); } catch (e) { console.warn(e); }
 
       const daily = data?.daily || [];
       const ddSeries = ddAgg
@@ -1431,7 +1453,7 @@
       for (const b of bins) {
         if (!knownBins.has(b.bin_id) && !firstEver) {
           markFresh(b.bin_id, "new");
-          toast({ kind: "new", title: "Nuovo cestino connesso", text: `<b>${escapeHtml(b.bin_id)}</b> ha iniziato a inviare dati` });
+          toast({ kind: "new", title: "Nuovo cestino connesso", text: `<b>${escapeHtml(binTitle(b))}</b> ha iniziato a inviare dati` });
         }
         knownBins.add(b.bin_id);
       }
@@ -1440,7 +1462,7 @@
         if (!knownBins.has(b.bin_id)) {
           knownBins.add(b.bin_id);
           markFresh(b.bin_id, "new");
-          toast({ kind: "new", title: "Nuovo cestino connesso", text: `<b>${escapeHtml(b.bin_id)}</b> ha iniziato a inviare dati` });
+          toast({ kind: "new", title: "Nuovo cestino connesso", text: `<b>${escapeHtml(binTitle(b))}</b> ha iniziato a inviare dati` });
         }
       }
     }
@@ -1461,7 +1483,7 @@
           if (freshBins.get(String(e.bin_id)) !== "new") markFresh(e.bin_id, "event");
           toast({
             title: `+${formatWeight(e.weight_g)} di ${escapeHtml(e.material || "rifiuto")}`,
-            text: `${escapeHtml(e.bin_id)} · ${formatCO2(e.co2_saved_g)} CO₂ risparmiata`,
+            text: `${escapeHtml(binTitle(e.bin_id))} · ${formatCO2(e.co2_saved_g)} CO₂ risparmiata`,
             color: materialColor(e.material)
           });
         }
@@ -1481,7 +1503,7 @@
         const delta = weights[b.bin_id] - (before ?? weights[b.bin_id]);
         if (delta > 0 && !notifiedBins.has(b.bin_id)) {
           if (freshBins.get(String(b.bin_id)) !== "new") markFresh(b.bin_id, "event");
-          if (!events) toast({ title: `+${formatWeight(delta)} conferiti`, text: `${escapeHtml(b.bin_id)}` });
+          if (!events) toast({ title: `+${formatWeight(delta)} conferiti`, text: `${escapeHtml(binTitle(b))}` });
         }
       }
     }
@@ -1523,7 +1545,8 @@
               <div class="binCell">
                 ${binGlyphHTML(fill, sFill, `${b.bin_id}|glyph|${i}`)}
                 <div>
-                  <div class="binId">${id}</div>
+                  <div class="binId">${escapeHtml(binTitle(b))}</div>
+                  ${binSubtitle(b) ? `<div class="binSub">${escapeHtml(binSubtitle(b))}</div>` : ""}
                   <div class="binMeta">${fillBadge(sFill)}</div>
                 </div>
               </div>
@@ -1577,7 +1600,8 @@
                 <span class="ringLbl">riempito</span>
               </div>
             </div>
-            <div class="tileName">${id}</div>
+            <div class="tileName" title="${escapeHtml(binTitle(b))}">${escapeHtml(binTitle(b))}</div>
+            ${binSubtitle(b) ? `<div class="tileLoc" title="${escapeHtml(binSubtitle(b))}">${escapeHtml(binSubtitle(b))}</div>` : ""}
             <div class="tileSub"><b>${formatWeight(b.current_weight_g)}</b> di ${fmtKg(b.capacity_g)}</div>
             <div class="tileComps">${compStripHTML(b, `${b.bin_id}|m`) || `<span class="compNone">${getFillSource(b) === "sensor" ? "Nessun dato sensori" : "Stima da peso"}</span>`}</div>
             <div class="tileFoot">${activityHTML(b.last_seen)}</div>
@@ -1595,14 +1619,14 @@
 
   function updateRangeHints(range, fineAgg) {
     let txt = range.label;
-    if (range.fine && fineAgg && !fineAgg.complete) txt += ` · ultimi ${FINE_EVENTS_LIMIT} conferimenti`;
-    if (range.hours === 24 && !fineAgg) txt = "Ultimo giorno (dato giornaliero)";
+    if (range.hours === 1 && fineAgg && !fineAgg.complete) txt += ` · parziale (ultimi ${fineAgg.fetched} conferimenti)`;
     if (range.hours === 1 && !fineAgg) txt = "Ultima ora · serve la Admin key";
     document.querySelectorAll(".rangeHint").forEach(el => { el.textContent = txt; });
     const sub = $("trendSub");
-    if (sub) sub.textContent = range.fine && fineAgg ? `valori ogni ${range.bucketMin === 60 ? "ora" : range.bucketMin + " minuti"}` : "valori giornalieri";
+    const fineOk = range.fine && fineAgg && (fineAgg.complete || range.hours === 1);
+    if (sub) sub.textContent = fineOk ? `valori ogni ${range.bucketMin === 60 ? "ora" : range.bucketMin + " minuti"}` : "valori giornalieri";
     const mSub = $("matSub");
-    if (mSub) mSub.textContent = fineAgg ? `Peso per frazione · ${range.label.toLowerCase()}` : "Peso per frazione · storico";
+    if (mSub) mSub.textContent = (fineAgg && fineAgg.complete) ? `Peso per frazione · ${range.label.toLowerCase()}` : "Peso per frazione · storico";
   }
 
   function setKpiUnavailable(id) {
@@ -1645,6 +1669,8 @@
       animateNumber("kpiTotalCO2", dash?.totals?.total_co2_saved_g, formatCO2);
 
       let binsAll = (dash?.bins || []).slice();
+      for (const k of Object.keys(binsById)) delete binsById[k];
+      for (const b of binsAll) binsById[b.bin_id] = b;
       safeText("binsCount", binsAll.length.toString());
 
       binsAll.sort((a, b) => {
@@ -1665,7 +1691,14 @@
 
       const daily = dash?.daily || [];
       let rangeW, rangeC, series;
-      if (fineAgg) {
+      if (fineAgg && range.hours === 24) {
+        // Totali esatti dal server; andamento orario solo se i conferimenti sono completi
+        rangeW = daily.reduce((s, r) => s + Number(r.weight_g || 0), 0);
+        rangeC = daily.reduce((s, r) => s + Number(r.co2_saved_g || 0), 0);
+        series = fineAgg.complete
+          ? fineAgg.buckets.map(b => ({ label: b.label, v: b.co2_g }))
+          : daily.map(r => ({ label: r.day, v: Number(r.co2_saved_g || 0) }));
+      } else if (fineAgg) {
         rangeW = fineAgg.weight_g;
         rangeC = fineAgg.co2_g;
         series = fineAgg.buckets.map(b => ({ label: b.label, v: b.co2_g }));
@@ -1695,7 +1728,8 @@
       lineChart.data.datasets[0].data = series.map(r => r.v);
       lineChart.update();
 
-      const mats = fineAgg ? fineAgg.materials : (dash?.by_material || []);
+      const useFineMats = fineAgg && fineAgg.complete;
+      const mats = useFineMats ? fineAgg.materials : (dash?.by_material || []);
       $("pieEmpty").style.display = mats.some(r => Number(r.weight_g || 0) > 0) ? "none" : "block";
       setDoughnutData(doughnutChart, mats);
 
@@ -1908,6 +1942,9 @@
     customAlert, customPrompt, STATUS_LABEL,
     getRangeDays: () => getRange().days,
     getRange, aggregateEvents, FINE_EVENTS_LIMIT,
+    binTitle, binsById, escapeHtml, timeAgo, isoToNice, fetchBinDetail, extraHeaders,
+    refresh: () => refresh(),
+    reopenDrawer: () => { if (drawerOpen && activeBinId) openBinDrawer(activeBinId, { soft: true }); },
   };
 
   document.addEventListener("DOMContentLoaded", () => {

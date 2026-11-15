@@ -49,6 +49,8 @@
     const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(s || ""));
     return m ? new Date(+m[1], +m[2] - 1, +m[3]) : null;
   };
+  // ExcelJS scrive le date in UTC: le spostiamo così che Excel mostri l'ora locale (Italia)
+  const xlDate = (d) => (d instanceof Date && !isNaN(d)) ? new Date(d.getTime() - d.getTimezoneOffset() * 60000) : d;
   const slug = (s) => String(s || "").normalize("NFD").replace(/[̀-ͯ]/g, "")
     .replace(/[^a-zA-Z0-9]+/g, "_").replace(/^_|_$/g, "").slice(0, 40);
   const cap = (s) => { const t = String(s || "").trim(); return t ? t[0].toUpperCase() + t.slice(1) : "—"; };
@@ -165,7 +167,7 @@
     const agg = aggregateEvents(dash?.recent_events || [], range);
     const notes = [];
     if (!agg.complete) {
-      notes.push(`Il server ha restituito al massimo ${FINE_EVENTS_LIMIT} conferimenti: nel periodo potrebbero essercene altri non inclusi.`);
+      notes.push(`DATO PARZIALE: il server ha restituito solo gli ultimi ${agg.fetched} conferimenti, tutti dentro il periodo; eventuali conferimenti precedenti non sono inclusi. Per un report completo usare un periodo di almeno 24 ore.`);
     }
     const perBin = bins.map(b => {
       const x = agg.byBin.get(String(b.bin_id));
@@ -424,13 +426,14 @@
     });
     kh.height = 24;
     const kpis = [
-      ["Rifiuti raccolti nel periodo (GRI 306-3)", kg(data.totalW), "kg", FMT_NUM],
+      ["Rifiuti raccolti nel periodo, stima (GRI 306-3)", kg(data.totalW), "kg", FMT_NUM],
       ["  di cui con destinazione prevista a recupero (GRI 306-4)", kg(groups.recovery), "kg", FMT_NUM],
       ["  di cui con destinazione prevista a smaltimento (GRI 306-5)", kg(groups.disposal), "kg", FMT_NUM],
       ...(groups.unclassified > 0 ? [["  di cui da classificare", kg(groups.unclassified), "kg", FMT_NUM]] : []),
       ["Tasso di raccolta differenziata", recoveryShare, "%", FMT_PCT],
       ["Emissioni di CO₂e evitate (stima, non deducibile da Scope 1-3)", kg(data.totalCO2), "kg CO₂e", FMT_NUM],
       ["Cestini monitorati", data.bins.length, "n.", "0"],
+      ...(Array.isArray(data.emptyings) ? [["Svuotamenti registrati nel periodo", data.emptyings.length, "n.", "0"]] : []),
       ["Rifiuti raccolti dall'attivazione (storico)", kg(data.allTime.w), "kg", FMT_NUM],
       ["CO₂e evitata dall'attivazione (storico, stima)", kg(data.allTime.co2), "kg CO₂e", FMT_NUM],
     ];
@@ -475,7 +478,7 @@
       put(r, 2, "Nessun dato sui materiali nel periodo.", { font: { italic: true, color: { argb: C.muted } } });
       r += 2;
     }
-    put(r, 2, "Le destinazioni sono previste in base alla frazione raccolta e vanno confermate con il gestore dei rifiuti. Vedi il foglio “Metodologia”.",
+    put(r, 2, "I pesi sono stimati (peso standard per conferimento) e le destinazioni sono previste in base alla frazione raccolta: vedi il foglio “Metodologia”.",
       { font: { italic: true, size: 9, color: { argb: C.muted } } });
 
     // ===== 2. Rifiuti (GRI 306 · ESRS E5) =====
@@ -517,7 +520,7 @@
       bodyRow(row, i % 2 === 1);
     });
     w2.addRow([]);
-    const n2 = w2.addRow(["Nota: Sorti misura i rifiuti conferiti e separati alla fonte. L'effettivo avvio a riciclo/recupero e la sede delle operazioni (in sito / fuori sito, GRI 306-4c e 306-5c) devono essere confermati dai formulari o dalle dichiarazioni del gestore."]);
+    const n2 = w2.addRow(["Nota: i pesi sono stimati con un peso standard per conferimento (vedi Metodologia). Sorti registra i rifiuti conferiti e separati alla fonte. L'effettivo avvio a riciclo/recupero e la sede delle operazioni (in sito / fuori sito, GRI 306-4c e 306-5c) devono essere confermati dai formulari o dalle dichiarazioni del gestore."]);
     w2.mergeCells(n2.number, 1, n2.number, 7);
     n2.getCell(1).font = { italic: true, size: 9, color: { argb: C.muted } };
     n2.getCell(1).alignment = { wrapText: true, vertical: "top" };
@@ -556,7 +559,7 @@
     tableHeader(h4);
     const firstDataRow = 5;
     data.daily.forEach((d, i) => {
-      const row = w4.addRow([d.date || d.day, kg(d.weight_g), kg(d.co2_g)]);
+      const row = w4.addRow([d.date ? xlDate(d.date) : d.day, kg(d.weight_g), kg(d.co2_g)]);
       if (d.date) row.getCell(1).numFmt = data.fine ? "dd/mm/yyyy hh:mm" : "dd/mm/yyyy";
       row.getCell(2).numFmt = FMT_KG; row.getCell(3).numFmt = FMT_KG;
       bodyRow(row, i % 2 === 1);
@@ -570,10 +573,10 @@
 
     // ===== 5. Cestini =====
     const w5 = wb.addWorksheet("Cestini", { views: [{ showGridLines: false, state: "frozen", ySplit: 4 }] });
-    w5.columns = [{ width: 22 }, { width: 18 }, { width: 18 }, { width: 16 }, { width: 14 }, { width: 18 }, { width: 22 }];
-    sheetHeader(w5, "Dettaglio per cestino", `Periodo: ${periodTxt} · stato al ${genTxt}`, 7);
+    w5.columns = [{ width: 26 }, { width: 16 }, { width: 30 }, { width: 22 }, { width: 18 }, { width: 18 }, { width: 14 }, { width: 13 }, { width: 16 }, { width: 20 }];
+    sheetHeader(w5, "Dettaglio per cestino", `Periodo: ${periodTxt} · stato al ${genTxt}`, 10);
     const h5 = w5.getRow(4);
-    h5.values = ["Cestino", "Rifiuti nel periodo (kg)", "CO₂e evitata (kg)", "Riempimento attuale", "Stato", "Capacità (kg)", "Ultimo conferimento"];
+    h5.values = ["Cestino", "Codice", "Posizione", "Cliente", "Rifiuti nel periodo (kg)", "CO₂e evitata (kg)", "Riempimento attuale", "Stato", "Capacità (kg)", "Ultimo conferimento"];
     tableHeader(h5);
     data.perBin.forEach((p, i) => {
       const b = p.bin;
@@ -581,26 +584,53 @@
       const st = S().statusOf(S().binStatusFill(b));
       const last = S().isoToDate(b.last_seen);
       const row = w5.addRow([
-        b.bin_id,
+        b.name || b.bin_id, b.bin_id, b.location || "", b.organization || "",
         p.weight_g === null ? "n.d." : kg(p.weight_g),
         p.co2_g === null ? "n.d." : kg(p.co2_g),
-        fill, S().STATUS_LABEL[st], kg(b.capacity_g), last || "—"
+        fill, S().STATUS_LABEL[st], kg(b.capacity_g), last ? xlDate(last) : "—"
       ]);
-      row.getCell(2).numFmt = FMT_KG; row.getCell(3).numFmt = FMT_KG; row.getCell(4).numFmt = "0%";
-      row.getCell(6).numFmt = FMT_KG;
-      if (last) row.getCell(7).numFmt = "dd/mm/yyyy hh:mm";
+      row.getCell(5).numFmt = FMT_KG; row.getCell(6).numFmt = FMT_KG; row.getCell(7).numFmt = "0%";
+      row.getCell(9).numFmt = FMT_KG;
+      if (last) row.getCell(10).numFmt = "dd/mm/yyyy hh:mm";
       bodyRow(row, i % 2 === 1);
       row.getCell(1).font = { bold: true };
       const stColor = st === "crit" ? "FFC0272D" : st === "warn" ? "FF8F6400" : "FF137A3A";
-      row.getCell(5).font = { bold: true, color: { argb: stColor } };
+      row.getCell(8).font = { bold: true, color: { argb: stColor } };
     });
+
+    // ===== 5b. Svuotamenti (se disponibili) =====
+    if (Array.isArray(data.emptyings)) {
+      const wE = wb.addWorksheet("Svuotamenti", { views: [{ showGridLines: false, state: "frozen", ySplit: 4 }] });
+      wE.columns = [{ width: 18 }, { width: 26 }, { width: 22 }, { width: 22 }, { width: 16 }, { width: 50 }];
+      sheetHeader(wE, "Registro degli svuotamenti", `Periodo: ${periodTxt} · ${data.emptyings.length} svuotamenti registrati`, 6);
+      const hE = wE.getRow(4);
+      hE.values = ["Data e ora", "Cestino", "Scomparto", "Operatore", "Livello prima", "Note"];
+      tableHeader(hE);
+      if (!data.emptyings.length) {
+        const r0 = wE.addRow(["Nessuno svuotamento registrato nel periodo"]);
+        r0.getCell(1).font = { italic: true, color: { argb: C.muted } };
+      }
+      const binsById = Object.fromEntries((data.bins || []).map(b => [b.bin_id, b]));
+      data.emptyings.forEach((e, i) => {
+        const b = binsById[e.bin_id];
+        const comp = e.compartment_id == null ? "Tutto il cestino"
+          : ((b?.compartments || []).find(c => String(c.compartment_id) === String(e.compartment_id))?.label || `Scomparto ${e.compartment_id}`);
+        const when = S().isoToDate(e.ts);
+        const row = wE.addRow([when ? xlDate(when) : e.ts, b?.name || e.bin_id, comp, e.emptied_by || "—",
+          e.fill_before_percent != null ? e.fill_before_percent / 100 : "—", e.note || ""]);
+        if (when) row.getCell(1).numFmt = "dd/mm/yyyy hh:mm";
+        if (e.fill_before_percent != null) row.getCell(5).numFmt = "0%";
+        bodyRow(row, i % 2 === 1);
+      });
+    }
 
     // ===== 6. Metodologia =====
     const w6 = wb.addWorksheet("Metodologia", { views: [{ showGridLines: false }] });
     w6.columns = [{ width: 30 }, { width: 100 }];
     sheetHeader(w6, "Metodologia, ipotesi e limiti", "Da allegare al report per garantire trasparenza e verificabilità dei dati.", 2);
     const meth = [
-      ["Fonte dei dati", "Dati misurati dai cestini intelligenti Sorti: ogni conferimento viene riconosciuto (frazione) e pesato dal dispositivo e registrato con data e ora."],
+      ["Fonte dei dati", "Dati raccolti dai cestini intelligenti Sorti: ogni conferimento viene riconosciuto (frazione) dal sistema di visione del dispositivo e registrato con data e ora."],
+      ["Peso dei rifiuti (stima)", "Nella configurazione attuale i cestini non dispongono di una bilancia: a ogni conferimento è associato un peso standard configurato sul dispositivo. I pesi e le emissioni evitate riportati sono quindi STIME proporzionali al numero di conferimenti e vanno dichiarati come tali. Il dato misurato direttamente è il numero di conferimenti per frazione."],
       ["Perimetro", `${data.bins.length} cestini Sorti dell'organizzazione. Il report copre solo i rifiuti conferiti in questi cestini, non la totalità dei rifiuti prodotti dall'organizzazione.`],
       ["Periodo", periodTxt],
       ["GRI 306-3 · ESRS E5-5 (37a)", "Rifiuti generati: somma dei pesi registrati nel periodo, espressi in kg e tonnellate."],
@@ -608,7 +638,7 @@
       ["GRI 306-5 · ESRS E5-5 (37c)", "Rifiuti destinati allo smaltimento: frazione indifferenziata/residua, con destinazione PREVISTA a termovalorizzazione o discarica."],
       ["Destinazione effettiva", "Il sistema registra la separazione alla fonte. L'effettivo trattamento a valle (riciclo, recupero, smaltimento) e la sede delle operazioni vanno confermati con formulari di identificazione rifiuti, MUD o dichiarazioni del gestore."],
       ["Pericolosità", "Le frazioni raccolte sono assunte come rifiuti urbani non pericolosi. Verificare eventuali flussi pericolosi (es. RAEE, pile) gestiti separatamente."],
-      ["Emissioni evitate", "Stima calcolata dal sistema Sorti applicando fattori di emissione per frazione al peso conferito. Sono emissioni evitate rispetto a uno scenario di riferimento: secondo GHG Protocol, GRI 305 ed ESRS E1 vanno riportate separatamente e non possono essere sottratte dalle emissioni Scope 1, 2 o 3."],
+      ["Emissioni evitate", "Stima calcolata dal sistema Sorti applicando fattori di emissione per frazione al peso stimato dei conferimenti (vedi “Peso dei rifiuti”). Sono emissioni evitate rispetto a uno scenario di riferimento: secondo GHG Protocol, GRI 305 ed ESRS E1 vanno riportate separatamente e non possono essere sottratte dalle emissioni Scope 1, 2 o 3."],
       ["Fattori di emissione", "Indicare qui la fonte dei fattori utilizzati dal backend Sorti (es. database ISPRA, DEFRA, Ecoinvent) e l'anno di riferimento, prima della pubblicazione."],
       ["Stato dei cestini", "Riempimento e stato sono istantanei, rilevati al momento della generazione del report."],
       ["Strumento", "Report generato automaticamente da Sorti SmartBin Console. I valori sono arrotondati al grammo."],
@@ -656,6 +686,21 @@
     setTimeout(() => URL.revokeObjectURL(a.href), 2000);
   }
 
+  // Registro svuotamenti (server v2 + Admin key); senza, il foglio non viene creato
+  async function attachEmptyings(data) {
+    const { apiUrl, fetchJSON, adminKey } = S();
+    if (!adminKey()) return;
+    const info = await (window.__sortiRegistry?.serverInfo?.() || Promise.resolve({ v2: false }));
+    if (!info.v2) return;
+    try {
+      const list = await fetchJSON(apiUrl(`/api/emptyings?days=${Math.max(1, data.days || 1)}`), { headers: { "X-API-Key": adminKey() } });
+      const from = data.start instanceof Date ? data.start.getTime() : 0;
+      data.emptyings = (Array.isArray(list) ? list : []).filter(e => (S().isoToDate(e.ts)?.getTime() || 0) >= from);
+    } catch (e) {
+      data.notes.push("Registro svuotamenti non disponibile: " + (e?.message || e).toString().split("\n")[0]);
+    }
+  }
+
   // ---------- Avvio ----------
   async function generateEsgReport(btn) {
     const { customAlert, customPrompt, getRange } = S();
@@ -675,16 +720,24 @@
     if (label) label.textContent = "Generazione…";
     try {
       let dataP;
-      if (range.hours === 24 && !S().adminKey()) {
-        // 24 ore senza Admin key: si usa il dato giornaliero del server
-        dataP = collectData(1).then(d => { d.notes.push("Periodo \"ultime 24 ore\" approssimato con il dato giornaliero del server (manca la Admin key per il dettaglio orario)."); return d; });
+      if (range.hours === 24) {
+        // Il server con days=1 calcola esattamente le ultime 24 ore (totali e materiali per cestino)
+        dataP = collectData(1).then(d => {
+          const end = new Date(), start = new Date(end.getTime() - 24 * 3600000);
+          const t = (x) => x.toLocaleTimeString("it-IT", { hour: "2-digit", minute: "2-digit" });
+          d.start = start; d.end = end; d.stampTime = true;
+          d.periodTxt = `${itDate(start)} ${t(start)} – ${itDate(end)} ${t(end)} (ultime 24 ore)`;
+          d.trendTitle = "Andamento per giorno";
+          return d;
+        });
       } else {
         dataP = range.fine ? collectFineData(range) : collectData(range.days);
       }
       const [data] = await Promise.all([dataP, ensureExcelJS()]);
+      await attachEmptyings(data);
       const wb = await buildWorkbook(data, orgName);
       const hm = (d) => `${pad(d.getHours())}${pad(d.getMinutes())}`;
-      const stamp = data.fine ? `${ymd(data.start)}_${hm(data.start)}-${hm(data.end)}` : `${ymd(data.start)}_${ymd(data.end)}`;
+      const stamp = (data.fine || data.stampTime) ? `${ymd(data.start)}_${hm(data.start)}-${hm(data.end)}` : `${ymd(data.start)}_${ymd(data.end)}`;
       const name = `Sorti_Report_ESG${orgName ? "_" + slug(orgName) : ""}_${stamp}.xlsx`;
       await downloadWorkbook(wb, name);
     } catch (e) {
