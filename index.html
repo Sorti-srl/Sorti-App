@@ -25,7 +25,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
 
-  <link rel="stylesheet" href="./app.css?v=300">
+  <link rel="stylesheet" href="./app.css?v=310">
 </head>
 
 <body>
@@ -94,6 +94,8 @@
       <label class="field">
         <span class="fieldLabel">Periodo</span>
         <select id="rangeSel">
+          <option value="1h">Ultima ora</option>
+          <option value="24h">Ultime 24 ore</option>
           <option value="7">Ultimi 7 giorni</option>
           <option value="30" selected>Ultimi 30 giorni</option>
           <option value="90">Ultimi 90 giorni</option>
@@ -195,7 +197,7 @@
         <div class="cardHeader">
           <div>
             <h2 class="title">CO₂ risparmiata nel tempo</h2>
-            <div class="cardSub"><span class="rangeHint">Ultimi 30 giorni</span> · valori giornalieri</div>
+            <div class="cardSub"><span class="rangeHint">Ultimi 30 giorni</span> · <span id="trendSub">valori giornalieri</span></div>
           </div>
         </div>
         <div class="canvasWrap"><canvas id="co2Line"></canvas></div>
@@ -206,7 +208,7 @@
         <div class="cardHeader">
           <div>
             <h2 class="title">Materiali</h2>
-            <div class="cardSub">Peso per frazione</div>
+            <div class="cardSub" id="matSub">Peso per frazione · storico</div>
           </div>
         </div>
         <div class="canvasWrap"><canvas id="matPie"></canvas></div>
@@ -418,9 +420,9 @@
   </dialog>
 
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-  <script src="./config.js?v=300"></script>
-  <script src="./app.js?v=300"></script>
-  <script src="./report.js?v=300"></script>
+  <script src="./config.js?v=310"></script>
+  <script src="./app.js?v=310"></script>
+  <script src="./report.js?v=310"></script>
 </body>
 
 </html>

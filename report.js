@@ -152,6 +152,42 @@
     };
   }
 
+  // Periodi brevi (ultima ora / 24 ore): calcolati dai singoli conferimenti
+  async function collectFineData(range) {
+    const { apiUrl, fetchJSON, adminKey, aggregateEvents, FINE_EVENTS_LIMIT } = S();
+    if (!adminKey()) {
+      throw new Error(`Per il report "${range.label}" serve la Admin key: i dati infra-giornalieri si calcolano dai singoli conferimenti.\nConfigurala nelle Impostazioni oppure scegli un periodo in giorni.`);
+    }
+    const headers = { "X-API-Key": adminKey() };
+    const dash = await fetchJSON(apiUrl(`/api/dashboard?days=1&events_limit=${FINE_EVENTS_LIMIT}`), { headers });
+    if (!dash?.is_admin) throw new Error("Admin key non valida (401). Aggiornala nelle Impostazioni.");
+    const bins = Array.isArray(dash?.bins) ? dash.bins : [];
+    const agg = aggregateEvents(dash?.recent_events || [], range);
+    const notes = [];
+    if (!agg.complete) {
+      notes.push(`Il server ha restituito al massimo ${FINE_EVENTS_LIMIT} conferimenti: nel periodo potrebbero essercene altri non inclusi.`);
+    }
+    const perBin = bins.map(b => {
+      const x = agg.byBin.get(String(b.bin_id));
+      return { bin: b, weight_g: x ? x.weight_g : 0, co2_g: x ? x.co2_g : 0 };
+    });
+    const materials = agg.materials.map(m => ({ material: m.material, weight_g: m.weight_g, co2_g: m.co2_saved_g, hasCo2: true }));
+    const start = new Date(agg.cutoff), end = new Date(agg.now);
+    const t = (d) => d.toLocaleTimeString("it-IT", { hour: "2-digit", minute: "2-digit" });
+    const sameDay = start.toDateString() === end.toDateString();
+    const periodTxt = sameDay
+      ? `${itDate(end)}, ${t(start)} – ${t(end)} (${range.label.toLowerCase()})`
+      : `${itDate(start)} ${t(start)} – ${itDate(end)} ${t(end)} (${range.label.toLowerCase()})`;
+    return {
+      days: range.days, range, fine: true, dash, bins, perBin, materials, materialsScope: "period", notes,
+      daily: agg.buckets.map(x => ({ day: x.label, date: new Date(x.t), weight_g: x.weight_g, co2_g: x.co2_g })),
+      totalW: agg.weight_g, totalCO2: agg.co2_g, eventCount: agg.count,
+      start, end, periodTxt,
+      trendTitle: range.bucketMin === 60 ? "Andamento orario" : `Andamento ogni ${range.bucketMin} minuti`,
+      allTime: { w: Number(dash?.totals?.total_weight_g || 0), co2: Number(dash?.totals?.total_co2_saved_g || 0) },
+    };
+  }
+
   // ---------- Immagini (logo e grafici) ----------
   function loadImage(src) {
     return new Promise((resolve, reject) => {
@@ -228,7 +264,7 @@
       out.trend = renderChart({
         type: "bar",
         data: {
-          labels: data.daily.map(r => r.date ? r.date.toLocaleDateString("it-IT", { day: "2-digit", month: "short" }) : r.day),
+          labels: data.daily.map(r => data.fine ? r.day : (r.date ? r.date.toLocaleDateString("it-IT", { day: "2-digit", month: "short" }) : r.day)),
           datasets: [
             {
               type: "line", label: "CO₂e evitata (kg)", yAxisID: "y1",
@@ -334,7 +370,8 @@
     wb.created = new Date();
     wb.title = "Report ESG – Gestione dei rifiuti";
 
-    const periodTxt = `${itDate(data.start)} – ${itDate(data.end)} (${data.days} giorni)`;
+    const periodTxt = data.periodTxt || `${itDate(data.start)} – ${itDate(data.end)} (${data.days} giorn${data.days === 1 ? "o" : "i"})`;
+    const trendTitle = data.trendTitle || "Andamento giornaliero";
     const genTxt = new Date().toLocaleString("it-IT", { dateStyle: "long", timeStyle: "short" });
 
     // Aggregati GRI 306
@@ -511,16 +548,16 @@
     totalRow(t3, C.softBlue);
 
     // ===== 4. Andamento giornaliero =====
-    const w4 = wb.addWorksheet("Andamento giornaliero", { views: [{ showGridLines: false, state: "frozen", ySplit: 4 }] });
+    const w4 = wb.addWorksheet(trendTitle.slice(0, 31), { views: [{ showGridLines: false, state: "frozen", ySplit: 4 }] });
     w4.columns = [{ width: 16 }, { width: 20 }, { width: 22 }];
-    sheetHeader(w4, "Andamento giornaliero", `Periodo: ${periodTxt}`, 3);
+    sheetHeader(w4, trendTitle, `Periodo: ${periodTxt}`, 3);
     const h4 = w4.getRow(4);
-    h4.values = ["Data", "Rifiuti raccolti (kg)", "CO₂e evitata (kg, stima)"];
+    h4.values = [data.fine ? "Ora" : "Data", "Rifiuti raccolti (kg)", "CO₂e evitata (kg, stima)"];
     tableHeader(h4);
     const firstDataRow = 5;
     data.daily.forEach((d, i) => {
       const row = w4.addRow([d.date || d.day, kg(d.weight_g), kg(d.co2_g)]);
-      if (d.date) row.getCell(1).numFmt = "dd/mm/yyyy";
+      if (d.date) row.getCell(1).numFmt = data.fine ? "dd/mm/yyyy hh:mm" : "dd/mm/yyyy";
       row.getCell(2).numFmt = FMT_KG; row.getCell(3).numFmt = FMT_KG;
       bodyRow(row, i % 2 === 1);
     });
@@ -621,10 +658,11 @@
 
   // ---------- Avvio ----------
   async function generateEsgReport(btn) {
-    const { customAlert, customPrompt, getRangeDays } = S();
+    const { customAlert, customPrompt, getRange } = S();
+    const range = getRange();
     const saved = localStorage.getItem(LS_ORG) || "";
     const org = await customPrompt(
-      `Nome dell'organizzazione o del sito (comparirà nel report).\nPeriodo: ultimi ${getRangeDays()} giorni, come selezionato in dashboard.`,
+      `Nome dell'organizzazione o del sito (comparirà nel report).\nPeriodo: ${range.label.toLowerCase()}, come selezionato in dashboard.`,
       saved, "Report ESG"
     );
     if (org === null) return;
@@ -636,10 +674,18 @@
     if (btn) { btn.disabled = true; btn.classList.add("busy"); }
     if (label) label.textContent = "Generazione…";
     try {
-      const days = getRangeDays();
-      const [data] = await Promise.all([collectData(days), ensureExcelJS()]);
+      let dataP;
+      if (range.hours === 24 && !S().adminKey()) {
+        // 24 ore senza Admin key: si usa il dato giornaliero del server
+        dataP = collectData(1).then(d => { d.notes.push("Periodo \"ultime 24 ore\" approssimato con il dato giornaliero del server (manca la Admin key per il dettaglio orario)."); return d; });
+      } else {
+        dataP = range.fine ? collectFineData(range) : collectData(range.days);
+      }
+      const [data] = await Promise.all([dataP, ensureExcelJS()]);
       const wb = await buildWorkbook(data, orgName);
-      const name = `Sorti_Report_ESG${orgName ? "_" + slug(orgName) : ""}_${ymd(data.start)}_${ymd(data.end)}.xlsx`;
+      const hm = (d) => `${pad(d.getHours())}${pad(d.getMinutes())}`;
+      const stamp = data.fine ? `${ymd(data.start)}_${hm(data.start)}-${hm(data.end)}` : `${ymd(data.start)}_${ymd(data.end)}`;
+      const name = `Sorti_Report_ESG${orgName ? "_" + slug(orgName) : ""}_${stamp}.xlsx`;
       await downloadWorkbook(wb, name);
     } catch (e) {
       await customAlert("Impossibile generare il report ESG:\n\n" + (e?.message || String(e)), "Errore");
