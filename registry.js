@@ -1,5 +1,5 @@
 // =========================================================
-// Sorti · Anagrafica cestini, registro svuotamenti, notifiche email
+// Sorti · Anagrafica cestini, registro svuotamenti, storico avvisi
 // Richiede il server Sorti API v2 (endpoint /api/info). Con il server
 // precedente le sezioni mostrano un invito ad aggiornarlo.
 // =========================================================
@@ -90,7 +90,6 @@
           <label class="regField"><span>Posizione</span><input name="location" maxlength="240" placeholder="es. Edificio B, Via Roma 1, Milano" value="${esc(bin.location)}"></label>
           <label class="regField"><span>Cliente / organizzazione</span><input name="organization" maxlength="160" placeholder="es. Università di Milano" value="${esc(bin.organization)}"></label>
           <label class="regField"><span>Capacità (kg)</span><input name="capacity_kg" type="number" min="0.1" step="0.1" value="${bin.capacity_g ? (bin.capacity_g / 1000) : ""}"></label>
-          <label class="regField wide"><span>Email per gli avvisi di cestino pieno</span><input name="alert_emails" maxlength="1000" placeholder="separate da virgola · vuoto = destinatari predefiniti del server" value="${esc(bin.alert_emails)}"></label>
           <label class="regField wide"><span>Note</span><textarea name="notes" maxlength="2000" rows="2" placeholder="es. chiavi in portineria, svuotamento il lunedì">${esc(bin.notes)}</textarea></label>
           <div class="regActions wide">
             <span id="regMsg" class="regMsg"></span>
@@ -113,7 +112,6 @@
         ${row("Posizione", bin.location, "non impostata")}
         ${row("Cliente", bin.organization, "non impostato")}
         ${row("Capacità", capTxt)}
-        ${admin ? row("Email avvisi", bin.alert_emails, "destinatari predefiniti") : ""}
         ${bin.notes ? `<div class="regRow wide"><span>Note</span><b>${esc(bin.notes)}</b></div>` : ""}
       </div>
       ${admin ? "" : notice("Per modificare l'anagrafica serve la Admin key (Impostazioni).")}`;
@@ -125,7 +123,6 @@
       name: fd.get("name") || "",
       location: fd.get("location") || "",
       organization: fd.get("organization") || "",
-      alert_emails: fd.get("alert_emails") || "",
       notes: fd.get("notes") || "",
     };
     const capKg = Number(String(fd.get("capacity_kg") || "").replace(",", "."));
@@ -229,77 +226,33 @@
   }
 
   // =========================================================
-  // Impostazioni: notifiche email
+  // Impostazioni: storico degli avvisi di cestino pieno (inviati via push)
   // =========================================================
   async function renderNotifySettings() {
-    const status = $("notifyStatus");
-    const help = $("notifyHelp");
     const log = $("notifyLog");
-    const row = $("notifyTestRow");
-    if (!status) return;
+    if (!log) return;
+    log.innerHTML = "";
     const info = await serverInfo();
-    const setStatus = (txt, on) => { status.textContent = txt; status.classList.toggle("on", !!on); };
-
-    if (!info.v2) {
-      setStatus("Server da aggiornare", false);
-      help.textContent = "Le notifiche email richiedono il server Sorti aggiornato (versione 2).";
-      row.style.display = "none"; log.innerHTML = "";
-      return;
-    }
-    if (!S().adminKey()) {
-      setStatus("—", false);
-      help.textContent = "Salva la Admin key per vedere e provare le notifiche.";
-      row.style.display = "none"; log.innerHTML = "";
-      return;
-    }
+    if (!info.v2 || !S().adminKey()) return;
     let st;
     try {
       st = await api("/api/notifications/status");
-    } catch (e) {
-      setStatus("Errore", false);
-      help.textContent = errMessage(e);
-      row.style.display = "none";
+    } catch {
       return;
     }
-    row.style.display = "";
-    if (st.smtp_configured) {
-      setStatus("Attive", true);
-      const to = st.default_recipients?.length ? st.default_recipients.join(", ") : "nessun destinatario predefinito";
-      help.innerHTML = `Avviso quando uno scomparto supera il <b>${Math.round(st.fill_threshold_percent)}%</b>. Destinatari predefiniti: ${esc(to)}. Ogni cestino può avere destinatari propri (Anagrafica).`;
-    } else {
-      setStatus("Non configurate", false);
-      help.textContent = "Il server non ha i dati SMTP: configura SMTP_HOST, SMTP_USER e SMTP_PASSWORD nel file .env del server.";
-    }
+    const short = (t) => (t || "").length > 140 ? t.slice(0, 140) + "…" : (t || "");
     const rows = (st.recent || []).slice(0, 5);
-    log.innerHTML = rows.length ? `<div class="notifyLogTitle">Ultimi invii</div>` + rows.map(n => `
+    log.innerHTML = rows.length ? `<div class="notifyLogTitle">Ultimi avvisi</div>` + rows.map(n => `
       <div class="notifyItem ${n.status}">
         <span class="nDot"></span>
         <div class="nMain">
           <div class="nSubj">${esc(n.subject || n.kind)}</div>
-          <div class="nMeta">${esc(fmtDate(n.ts))} · ${n.status === "sent" ? "inviata" : n.status === "error" ? `errore: ${esc((n.error || "").length > 140 ? (n.error || "").slice(0, 140) + "…" : (n.error || ""))}` : "in invio"}</div>
+          <div class="nMeta">${esc(fmtDate(n.ts))} · ${n.status === "sent" ? "inviato" : n.status === "error" ? `errore: ${esc(short(n.error))}` : "in invio"}</div>
         </div>
       </div>`).join("") : "";
     if (st.rejected_events > 0) {
       const n = st.rejected_events;
       log.innerHTML += notice(`${n} conferiment${n === 1 ? "o scartato" : "i scartati"} perché non valid${n === 1 ? "o" : "i"} (salvat${n === 1 ? "o" : "i"} sul server nella tabella rejected_events).`, "warn");
-    }
-  }
-
-  async function sendTestEmail() {
-    const btn = $("btnTestEmail");
-    const to = $("testEmailTo").value.trim();
-    btn.disabled = true;
-    const old = btn.textContent;
-    btn.textContent = "Invio…";
-    try {
-      const r = await api("/api/notifications/test", { method: "POST", body: to ? { to } : {} });
-      await S().customAlert(`Email di prova inviata a: ${(r.sent_to || []).join(", ")}.\nControlla anche la cartella Spam.`, "Email inviata");
-    } catch (e) {
-      await S().customAlert("Invio non riuscito:\n\n" + errMessage(e), "Errore");
-    } finally {
-      btn.disabled = false;
-      btn.textContent = old;
-      renderNotifySettings();
     }
   }
 
@@ -315,6 +268,5 @@
     $("emptyClose")?.addEventListener("click", () => $("emptyModal").close());
     $("emptyForm")?.addEventListener("submit", (e) => { e.preventDefault(); submitEmpty(); });
     $("btnSettings")?.addEventListener("click", () => renderNotifySettings());
-    $("btnTestEmail")?.addEventListener("click", sendTestEmail);
   });
 })();

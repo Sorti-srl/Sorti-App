@@ -185,6 +185,7 @@
     } finally {
       btn.disabled = false;
       renderDevices();
+      window.__sortiRegistry?.renderNotifySettings?.();
     }
   }
 
