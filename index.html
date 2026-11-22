@@ -34,7 +34,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
 
-  <link rel="stylesheet" href="./app.css?v=340">
+  <link rel="stylesheet" href="./app.css?v=360">
 </head>
 
 <body>
@@ -98,7 +98,8 @@
     <section class="pageHead" id="sec-overview" data-section>
       <div>
         <h1>Panoramica</h1>
-        <p class="sub">Raccolta differenziata, CO₂ risparmiata e stato di riempimento in tempo reale.</p>
+        <p class="sub">Raccolta differenziata, CO₂ potenzialmente evitata e stato di riempimento in tempo reale.</p>
+        <p class="coefNote" id="coefNote"></p>
       </div>
       <div class="pageActions">
       <label class="field">
@@ -121,7 +122,7 @@
     <section class="kpiGrid">
       <div class="kpi kpiHero">
         <div class="kpiTop">
-          <span class="label">CO₂ risparmiata</span>
+          <span class="label">CO₂ potenzialmente evitata</span>
           <span class="kpiIcon"><svg class="ico"><use href="#i-leaf" /></svg></span>
         </div>
         <div id="kpiRangeCO2" class="value num skeleton">—</div>
@@ -129,7 +130,7 @@
       </div>
       <div class="kpi">
         <div class="kpiTop">
-          <span class="label">Rifiuti raccolti</span>
+          <span class="label">Rifiuti raccolti · stimati</span>
           <span class="kpiIcon"><svg class="ico"><use href="#i-scale" /></svg></span>
         </div>
         <div id="kpiRangeWeight" class="value num skeleton">—</div>
@@ -137,7 +138,7 @@
       </div>
       <div class="kpi">
         <div class="kpiTop">
-          <span class="label">CO₂ totale</span>
+          <span class="label">CO₂ pot. evitata · totale</span>
           <span class="kpiIcon"><svg class="ico"><use href="#i-globe" /></svg></span>
         </div>
         <div id="kpiTotalCO2" class="value num skeleton">—</div>
@@ -145,7 +146,7 @@
       </div>
       <div class="kpi">
         <div class="kpiTop">
-          <span class="label">Totale raccolto</span>
+          <span class="label">Totale raccolto · stimato</span>
           <span class="kpiIcon"><svg class="ico"><use href="#i-stack" /></svg></span>
         </div>
         <div id="kpiTotalWeight" class="value num skeleton">—</div>
@@ -191,7 +192,7 @@
               <th>Cestino</th>
               <th>Riempimento</th>
               <th>Scomparti</th>
-              <th>Peso / Capacità</th>
+              <th>Peso stimato / Capacità</th>
               <th class="right">Attività</th>
             </tr>
           </thead>
@@ -206,7 +207,7 @@
       <div class="card">
         <div class="cardHeader">
           <div>
-            <h2 class="title">CO₂ risparmiata nel tempo</h2>
+            <h2 class="title">CO₂ potenzialmente evitata nel tempo</h2>
             <div class="cardSub"><span class="rangeHint">Ultimi 30 giorni</span> · <span id="trendSub">valori giornalieri</span></div>
           </div>
         </div>
@@ -218,7 +219,7 @@
         <div class="cardHeader">
           <div>
             <h2 class="title">Materiali</h2>
-            <div class="cardSub" id="matSub">Peso per frazione · storico</div>
+            <div class="cardSub" id="matSub">Peso stimato per frazione · storico</div>
           </div>
         </div>
         <div class="canvasWrap"><canvas id="matPie"></canvas></div>
@@ -243,8 +244,8 @@
               <th>Quando</th>
               <th>Cestino</th>
               <th>Materiale</th>
-              <th class="right">Peso</th>
-              <th class="right">CO₂</th>
+              <th class="right">Peso stimato</th>
+              <th class="right">CO₂ pot. evitata</th>
               <th class="right">ID evento</th>
             </tr>
           </thead>
@@ -292,9 +293,9 @@
           <div id="ddFillHint" class="hint">—</div>
         </div>
         <div class="kpi kpiTight">
-          <span class="label">Peso attuale</span>
+          <span class="label">Peso attuale (stima)</span>
           <div id="ddWeight" class="value num">—</div>
-          <div class="hint">nel cestino</div>
+          <div class="hint">stimato, nel cestino</div>
         </div>
         <div class="kpi kpiTight">
           <span class="label">Capacità</span>
@@ -319,6 +320,19 @@
 
       <div class="ddSection">
         <div class="ddSectionHead">
+          <h3 class="title">Riepilogo per caso studio</h3>
+          <span class="cardSub">conferimenti per categoria</span>
+        </div>
+        <div class="caseControls" id="caseControls">
+          <label class="regField"><span>Dal</span><input type="date" id="caseFrom" /></label>
+          <label class="regField"><span>Al</span><input type="date" id="caseTo" /></label>
+          <button class="btn btnSm" type="button" id="caseToday">Oggi</button>
+        </div>
+        <div id="caseBody"></div>
+      </div>
+
+      <div class="ddSection">
+        <div class="ddSectionHead">
           <h3 class="title">Svuotamenti</h3>
           <button class="btn btnPrimary btnSm" id="btnRegisterEmpty" style="display:none">
             <svg class="ico"><use href="#i-bin" /></svg><span>Registra svuotamento</span>
@@ -337,7 +351,7 @@
 
       <div class="ddSection">
         <div class="ddSectionHead">
-          <h3 class="title">CO₂ risparmiata</h3>
+          <h3 class="title">CO₂ potenzialmente evitata</h3>
           <span class="cardSub" id="ddRangeLabel">—</span>
         </div>
         <div class="canvasWrap ddCanvas"><canvas id="ddLine"></canvas></div>
@@ -347,7 +361,7 @@
       <div class="ddSection">
         <div class="ddSectionHead">
           <h3 class="title">Materiali</h3>
-          <span class="cardSub">peso per frazione</span>
+          <span class="cardSub">peso stimato per frazione</span>
         </div>
         <div class="canvasWrap ddCanvas"><canvas id="ddPie"></canvas></div>
         <div id="ddPieEmpty" class="emptyState" style="display:none">Nessun dato sui materiali.</div>
@@ -365,8 +379,8 @@
               <tr>
                 <th>Quando</th>
                 <th>Materiale</th>
-                <th class="right">Peso</th>
-                <th class="right">CO₂</th>
+                <th class="right">Peso stimato</th>
+                <th class="right">CO₂ pot. evitata</th>
                 <th class="right">ID evento</th>
               </tr>
             </thead>
@@ -485,11 +499,12 @@
   </dialog>
 
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-  <script src="./config.js?v=340"></script>
-  <script src="./app.js?v=340"></script>
-  <script src="./report.js?v=340"></script>
-  <script src="./registry.js?v=350"></script>
+  <script src="./config.js?v=360"></script>
+  <script src="./app.js?v=360"></script>
+  <script src="./report.js?v=360"></script>
+  <script src="./registry.js?v=360"></script>
   <script src="./push.js?v=350"></script>
+  <script src="./casestudy.js?v=360"></script>
 </body>
 
 </html>

@@ -426,9 +426,22 @@
     return col;
   }
 
+  // Nomi delle categorie come nel file di campionamento ("metallo" nel codice = Alluminio)
+  const MATERIAL_LABELS = { metallo: "Alluminio" };
+  function materialLabel(name) {
+    const k = String(name || "").trim().toLowerCase();
+    if (!k) return "—";
+    return MATERIAL_LABELS[k] || (k.charAt(0).toUpperCase() + k.slice(1));
+  }
+
   function materialHTML(name) {
     const n = name || "—";
-    return `<span class="matCell"><span class="matDot" style="background:${materialColor(n)}"></span>${escapeHtml(n)}</span>`;
+    return `<span class="matCell"><span class="matDot" style="background:${materialColor(n)}"></span>${escapeHtml(materialLabel(n))}</span>`;
+  }
+
+  // Peso stimato di un conferimento; 0 = categoria senza peso medio (es. organico non campionato)
+  function weightTxt(g) {
+    return Number(g) > 0 ? formatWeight(g) : `<span class="muted" title="Peso non stimato: categoria senza pesate di campionamento">n.s.</span>`;
   }
 
   function priorityOf(fill) {
@@ -611,7 +624,7 @@
         <td class="muted" title="${whenTitle}">${whenHuman}</td>
         <td><b>${escapeHtml(binId)}</b></td>
         <td>${materialHTML(material)}</td>
-        <td class="right">${formatWeight(w)}</td>
+        <td class="right">${weightTxt(w)}</td>
         <td class="right">${formatCO2(co2)}</td>
         <td class="mono" style="text-align:right" title="${escapeHtml(String(eid))}">${shortId(eid)}</td>
       </tr>
@@ -636,7 +649,7 @@
         <tr data-eid="${String(eid)}">
           <td class="muted" title="${whenTitle}">${whenHuman}</td>
           <td>${materialHTML(material)}</td>
-          <td class="right">${formatWeight(w)}</td>
+          <td class="right">${weightTxt(w)}</td>
           <td class="right">${formatCO2(co2)}</td>
           <td class="mono" style="text-align:right" title="${escapeHtml(String(eid))}">${shortId(eid)}</td>
         </tr>
@@ -790,7 +803,7 @@
         interaction: { mode: "index", intersect: false },
         plugins: {
           legend: { display: false },
-          tooltip: withTooltip ? { callbacks: { label: (ctx) => `CO₂ risparmiata: ${formatCO2(ctx.parsed.y)}` } } : {}
+          tooltip: withTooltip ? { callbacks: { label: (ctx) => `CO₂ potenzialmente evitata: ${formatCO2(ctx.parsed.y)}` } } : {}
         },
         scales: {
           x: {
@@ -848,7 +861,7 @@
   }
 
   function setDoughnutData(chart, mats) {
-    chart.data.labels = mats.map(r => r.material);
+    chart.data.labels = mats.map(r => materialLabel(r.material));
     chart.data.datasets[0].data = mats.map(r => Number(r.weight_g || 0));
     chart.data.datasets[0].backgroundColor = mats.map(r => materialColor(r.material));
     chart.update();
@@ -923,8 +936,8 @@
       const bi = Math.min(nB - 1, Math.max(0, Math.floor((t - start) / bucketMs)));
       buckets[bi].weight_g += ew; buckets[bi].co2_g += ec; buckets[bi].count++;
       const mk = String(e.material || "non specificato").trim().toLowerCase();
-      const m = byMat.get(mk) || { material: mk, weight_g: 0, co2_saved_g: 0 };
-      m.weight_g += ew; m.co2_saved_g += ec; byMat.set(mk, m);
+      const m = byMat.get(mk) || { material: mk, weight_g: 0, co2_saved_g: 0, events: 0 };
+      m.weight_g += ew; m.co2_saved_g += ec; m.events += 1; byMat.set(mk, m);
       const bk = String(e.bin_id || "—");
       const bb = byBin.get(bk) || { weight_g: 0, co2_g: 0, count: 0 };
       bb.weight_g += ew; bb.co2_g += ec; bb.count++; byBin.set(bk, bb);
@@ -1184,6 +1197,7 @@
 
       renderCompartments(b);
       try { window.__sortiRegistry?.renderDrawer(b, { soft }); } catch (e) { console.warn(e); }
+      try { window.__sortiCase?.render(b); } catch (e) { console.warn(e); }
 
       const daily = data?.daily || [];
       const ddSeries = ddAgg
@@ -1230,7 +1244,7 @@
             <tr data-eid="${String(eid)}">
               <td class="muted" title="${whenTitle}">${whenHuman}</td>
               <td>${materialHTML(e.material)}</td>
-              <td class="right">${formatWeight(e.weight_g)}</td>
+              <td class="right">${weightTxt(e.weight_g)}</td>
               <td class="right">${formatCO2(e.co2_saved_g)}</td>
               <td class="mono" style="text-align:right" title="${escapeHtml(String(eid))}">${shortId(eid)}</td>
             </tr>
@@ -1307,7 +1321,7 @@
           <td class="muted" title="${whenTitle}">${whenHuman}</td>
           <td><b>${escapeHtml(e.bin_id)}</b></td>
           <td>${materialHTML(e.material)}</td>
-          <td class="right">${formatWeight(e.weight_g)}</td>
+          <td class="right">${weightTxt(e.weight_g)}</td>
           <td class="right">${formatCO2(e.co2_saved_g)}</td>
           <td class="mono" style="text-align:right" title="${escapeHtml(String(eid))}">${shortId(eid)}</td>
         </tr>
@@ -1482,8 +1496,10 @@
           notifiedBins.add(e.bin_id);
           if (freshBins.get(String(e.bin_id)) !== "new") markFresh(e.bin_id, "event");
           toast({
-            title: `+${formatWeight(e.weight_g)} di ${escapeHtml(e.material || "rifiuto")}`,
-            text: `${escapeHtml(binTitle(e.bin_id))} · ${formatCO2(e.co2_saved_g)} CO₂ risparmiata`,
+            title: Number(e.weight_g) > 0
+              ? `${escapeHtml(materialLabel(e.material))} · +${formatWeight(e.weight_g)} (stima)`
+              : `${escapeHtml(materialLabel(e.material))} · nuovo conferimento`,
+            text: `${escapeHtml(binTitle(e.bin_id))} · ${formatCO2(e.co2_saved_g)} CO₂ pot. evitata`,
             color: materialColor(e.material)
           });
         }
@@ -1560,7 +1576,7 @@
             </td>
             <td>${compSummaryHTML(b)}</td>
             <td class="weightCell" data-col="weight">
-              <b>${formatWeight(b.current_weight_g)}</b> <span class="of">/ ${fmtKg(b.capacity_g)}</span>
+              <b title="Peso stimato dai conferimenti">≈ ${formatWeight(b.current_weight_g)}</b> <span class="of">/ ${fmtKg(b.capacity_g)}</span>
             </td>
             <td class="lastCell">${activityHTML(b.last_seen)}</td>
           </tr>
@@ -1602,7 +1618,7 @@
             </div>
             <div class="tileName" title="${escapeHtml(binTitle(b))}">${escapeHtml(binTitle(b))}</div>
             ${binSubtitle(b) ? `<div class="tileLoc" title="${escapeHtml(binSubtitle(b))}">${escapeHtml(binSubtitle(b))}</div>` : ""}
-            <div class="tileSub"><b>${formatWeight(b.current_weight_g)}</b> di ${fmtKg(b.capacity_g)}</div>
+            <div class="tileSub" title="Peso stimato dai conferimenti"><b>≈ ${formatWeight(b.current_weight_g)}</b> di ${fmtKg(b.capacity_g)}</div>
             <div class="tileComps">${compStripHTML(b, `${b.bin_id}|m`) || `<span class="compNone">${getFillSource(b) === "sensor" ? "Nessun dato sensori" : "Stima da peso"}</span>`}</div>
             <div class="tileFoot">${activityHTML(b.last_seen)}</div>
           </div>
@@ -1626,7 +1642,15 @@
     const fineOk = range.fine && fineAgg && (fineAgg.complete || range.hours === 1);
     if (sub) sub.textContent = fineOk ? `valori ogni ${range.bucketMin === 60 ? "ora" : range.bucketMin + " minuti"}` : "valori giornalieri";
     const mSub = $("matSub");
-    if (mSub) mSub.textContent = (fineAgg && fineAgg.complete) ? `Peso per frazione · ${range.label.toLowerCase()}` : "Peso per frazione · storico";
+    if (mSub) mSub.textContent = (fineAgg && fineAgg.complete) ? `Peso stimato per frazione · ${range.label.toLowerCase()}` : "Peso stimato per frazione · storico";
+  }
+
+  function renderCoefNote(c) {
+    const el = $("coefNote");
+    if (!el) return;
+    if (!c || !c.version) { el.textContent = ""; return; }
+    const d = c.date ? new Date(c.date + "T12:00:00").toLocaleDateString("it-IT", { day: "2-digit", month: "2-digit", year: "numeric" }) : "";
+    el.innerHTML = `Pesi <b>stimati</b>: conferimenti × peso medio per categoria (coefficienti <b>${escapeHtml(c.version)}</b>${d ? ` del ${d}` : ""}). CO₂ potenzialmente evitata secondo ${escapeHtml(c.co2_source ? c.co2_source.split(",")[0] : "EPA WARM")}${c.co2_baseline ? ` rispetto a ${escapeHtml(String(c.co2_baseline).toLowerCase())}` : ""}.`;
   }
 
   function setKpiUnavailable(id) {
@@ -1664,6 +1688,7 @@
       updateRangeHints(range, fineAgg);
 
       lastIsAdmin = !!dash?.is_admin;
+      renderCoefNote(dash?.coefficients);
 
       animateNumber("kpiTotalWeight", dash?.totals?.total_weight_g, formatWeight);
       animateNumber("kpiTotalCO2", dash?.totals?.total_co2_saved_g, formatCO2);
@@ -1886,7 +1911,7 @@
               `bin: ${resp.bin_id}\n` +
               `materiale: ${resp.material}\n` +
               `peso: ${formatWeight(resp.weight_g)}\n` +
-              `CO₂ risparmiata: ${formatCO2(resp.co2_saved_g)}\n` +
+              `CO₂ potenzialmente evitata: ${formatCO2(resp.co2_saved_g)}\n` +
               `riempimento totale: ${Math.round(getFillPercent(resp.bin || {}))}%`;
           }
 
@@ -1942,7 +1967,7 @@
     customAlert, customPrompt, STATUS_LABEL,
     getRangeDays: () => getRange().days,
     getRange, aggregateEvents, FINE_EVENTS_LIMIT,
-    binTitle, binsById, escapeHtml, timeAgo, isoToNice, fetchBinDetail, extraHeaders,
+    binTitle, binsById, escapeHtml, timeAgo, isoToNice, fetchBinDetail, extraHeaders, materialLabel, formatWeight,
     refresh: () => refresh(),
     reopenDrawer: () => { if (drawerOpen && activeBinId) openBinDrawer(activeBinId, { soft: true }); },
   };

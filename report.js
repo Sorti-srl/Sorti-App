@@ -98,8 +98,9 @@
         co2 = daily.reduce((s, x) => s + Number(x.co2_saved_g || 0), 0);
         for (const m of (d.by_material || [])) {
           const key = String(m.material || "non specificato").trim().toLowerCase();
-          const cur = matMap.get(key) || { material: key, weight_g: 0, co2_g: 0, hasCo2: false };
+          const cur = matMap.get(key) || { material: key, weight_g: 0, co2_g: 0, hasCo2: false, events: 0 };
           cur.weight_g += Number(m.weight_g || 0);
+          cur.events += Number(m.events || 0);
           if (m.co2_saved_g !== undefined && m.co2_saved_g !== null) {
             cur.co2_g += Number(m.co2_saved_g || 0);
             cur.hasCo2 = true;
@@ -117,7 +118,7 @@
       for (const m of (dash?.by_material || [])) {
         const key = String(m.material || "non specificato").trim().toLowerCase();
         matMap.set(key, {
-          material: key, weight_g: Number(m.weight_g || 0),
+          material: key, weight_g: Number(m.weight_g || 0), events: Number(m.events || 0),
           co2_g: Number(m.co2_saved_g || 0), hasCo2: m.co2_saved_g !== undefined
         });
       }
@@ -173,7 +174,7 @@
       const x = agg.byBin.get(String(b.bin_id));
       return { bin: b, weight_g: x ? x.weight_g : 0, co2_g: x ? x.co2_g : 0 };
     });
-    const materials = agg.materials.map(m => ({ material: m.material, weight_g: m.weight_g, co2_g: m.co2_saved_g, hasCo2: true }));
+    const materials = agg.materials.map(m => ({ material: m.material, weight_g: m.weight_g, co2_g: m.co2_saved_g, hasCo2: true, events: m.events || 0 }));
     const start = new Date(agg.cutoff), end = new Date(agg.now);
     const t = (d) => d.toLocaleTimeString("it-IT", { hour: "2-digit", minute: "2-digit" });
     const sameDay = start.toDateString() === end.toDateString();
@@ -269,7 +270,7 @@
           labels: data.daily.map(r => data.fine ? r.day : (r.date ? r.date.toLocaleDateString("it-IT", { day: "2-digit", month: "short" }) : r.day)),
           datasets: [
             {
-              type: "line", label: "CO₂e evitata (kg)", yAxisID: "y1",
+              type: "line", label: "CO₂e potenzialmente evitata (kg)", yAxisID: "y1",
               data: data.daily.map(r => kg(r.co2_g)),
               borderColor: "#09182F", backgroundColor: "#09182F", borderWidth: 2.5, pointRadius: 0, tension: .35
             },
@@ -294,7 +295,7 @@
       out.materials = renderChart({
         type: "doughnut",
         data: {
-          labels: data.materials.map(m => cap(m.material)),
+          labels: data.materials.map(m => S().materialLabel(m.material)),
           datasets: [{
             data: data.materials.map(m => kg(m.weight_g)),
             backgroundColor: data.materials.map(m => S().materialColor(m.material)),
@@ -410,9 +411,13 @@
     put(12, 3, `Sistema Sorti SmartBin · ${data.bins.length} cestini intelligenti`);
     put(13, 2, "Riferimenti", { font: { color: { argb: C.muted }, size: 10 } });
     put(13, 3, "GRI 306 (Rifiuti 2020) · ESRS E5 (Uso delle risorse ed economia circolare)");
+    if (data.coef) {
+      put(14, 2, "Coefficienti di stima", { font: { color: { argb: C.muted }, size: 10 } });
+      put(14, 3, `Versione ${data.coef.version}${data.coef.date ? " del " + itDate(new Date(data.coef.date + "T12:00:00")) : ""} · pesi medi da campionamento · CO₂e: ${String(data.coef.co2_source || "").split(",")[0]}`);
+    }
 
     // KPI
-    const kpiStart = 15;
+    const kpiStart = 16;
     const kh = ws.getRow(kpiStart);
     ws.getCell(kpiStart, 2).value = "Indicatore";
     ws.getCell(kpiStart, 3).value = "Valore";
@@ -426,16 +431,17 @@
     });
     kh.height = 24;
     const kpis = [
+      ...(data.materials.some(m => m.events) ? [["Conferimenti riconosciuti nel periodo (dato misurato)", data.materials.reduce((t, m) => t + (m.events || 0), 0), "n.", "0"]] : []),
       ["Rifiuti raccolti nel periodo, stima (GRI 306-3)", kg(data.totalW), "kg", FMT_NUM],
       ["  di cui con destinazione prevista a recupero (GRI 306-4)", kg(groups.recovery), "kg", FMT_NUM],
       ["  di cui con destinazione prevista a smaltimento (GRI 306-5)", kg(groups.disposal), "kg", FMT_NUM],
       ...(groups.unclassified > 0 ? [["  di cui da classificare", kg(groups.unclassified), "kg", FMT_NUM]] : []),
       ["Tasso di raccolta differenziata", recoveryShare, "%", FMT_PCT],
-      ["Emissioni di CO₂e evitate (stima, non deducibile da Scope 1-3)", kg(data.totalCO2), "kg CO₂e", FMT_NUM],
+      ["CO₂e potenzialmente evitata (stima, non deducibile da Scope 1-3)", kg(data.totalCO2), "kg CO₂e", FMT_NUM],
       ["Cestini monitorati", data.bins.length, "n.", "0"],
       ...(Array.isArray(data.emptyings) ? [["Svuotamenti registrati nel periodo", data.emptyings.length, "n.", "0"]] : []),
       ["Rifiuti raccolti dall'attivazione (storico)", kg(data.allTime.w), "kg", FMT_NUM],
-      ["CO₂e evitata dall'attivazione (storico, stima)", kg(data.allTime.co2), "kg CO₂e", FMT_NUM],
+      ["CO₂e potenzialmente evitata dall'attivazione (storico, stima)", kg(data.allTime.co2), "kg CO₂e", FMT_NUM],
     ];
     kpis.forEach((k, i) => {
       const r = kpiStart + 1 + i;
@@ -448,7 +454,7 @@
         const cell = ws.getCell(r, c);
         cell.border = border;
         cell.alignment = { vertical: "middle", horizontal: c === 2 ? "left" : c === 3 ? "right" : "center", indent: c === 2 ? 1 : 0 };
-        if (i === 0 || k[0].startsWith("Tasso") || k[0].startsWith("Emissioni")) {
+        if (k[0].startsWith("Rifiuti raccolti nel periodo") || k[0].startsWith("Tasso") || k[0].startsWith("CO₂e potenzialmente evitata (stima")) {
           cell.font = { bold: true, color: { argb: c === 3 ? C.brand : C.ink }, size: c === 3 ? 12 : 11 };
           cell.fill = fill(C.soft);
         } else if (k[0].startsWith("  ")) {
@@ -483,15 +489,17 @@
 
     // ===== 2. Rifiuti (GRI 306 · ESRS E5) =====
     const w2 = wb.addWorksheet("Rifiuti GRI 306 - ESRS E5", { views: [{ showGridLines: false, state: "frozen", ySplit: 4 }], properties: { tabColor: { argb: C.brand } } });
-    w2.columns = [{ width: 36 }, { width: 16 }, { width: 14 }, { width: 13 }, { width: 46 }, { width: 28 }, { width: 28 }];
+    w2.columns = [{ width: 36 }, { width: 14 }, { width: 16 }, { width: 14 }, { width: 13 }, { width: 46 }, { width: 28 }, { width: 28 }];
     sheetHeader(w2, "Rifiuti raccolti per frazione e destinazione prevista",
-      `Periodo: ${periodTxt} · ${org || "Organizzazione non specificata"}`, 7);
+      `Periodo: ${periodTxt} · ${org || "Organizzazione non specificata"}`, 8);
     const h2 = w2.getRow(4);
-    h2.values = ["Frazione", "Peso (kg)", "Peso (t)", "% sul totale", "Destinazione prevista", "Riferimento", "Pericolosità"];
+    h2.values = ["Frazione", "Conferimenti (misurati)", "Peso stimato (kg)", "Peso stimato (t)", "% sul totale", "Destinazione prevista", "Riferimento", "Pericolosità"];
     tableHeader(h2);
     data.materials.forEach((m, i) => {
-      const row = w2.addRow([cap(m.material), kg(m.weight_g), kg(m.weight_g) / 1000, matTot > 0 ? m.weight_g / matTot : 0, m.cls.op, m.cls.ref, "Non pericoloso (da verificare)"]);
-      row.getCell(2).numFmt = FMT_KG; row.getCell(3).numFmt = FMT_T; row.getCell(4).numFmt = FMT_PCT;
+      const noW = !(m.weight_g > 0) && (m.events || 0) > 0;
+      const row = w2.addRow([S().materialLabel(m.material), m.events || 0, noW ? "non stimato" : kg(m.weight_g), noW ? "—" : kg(m.weight_g) / 1000,
+        matTot > 0 ? m.weight_g / matTot : 0, m.cls.op, m.cls.ref, "Non pericoloso (da verificare)"]);
+      row.getCell(2).numFmt = "0"; row.getCell(3).numFmt = FMT_KG; row.getCell(4).numFmt = FMT_T; row.getCell(5).numFmt = FMT_PCT;
       bodyRow(row, i % 2 === 1);
       row.getCell(1).font = { bold: true, color: { argb: (S().materialColor(m.material) || "#0F1E1B").replace("#", "FF").toUpperCase() } };
     });
@@ -507,8 +515,8 @@
     ];
     if (groups.unclassified > 0) sumRows.push(["Da classificare", groups.unclassified, "—", C.warnSoft]);
     for (const [label, g, ref, col] of sumRows) {
-      const row = w2.addRow([label, kg(g), kg(g) / 1000, matTot > 0 ? g / matTot : 0, "", ref, ""]);
-      row.getCell(2).numFmt = FMT_KG; row.getCell(3).numFmt = FMT_T; row.getCell(4).numFmt = FMT_PCT;
+      const row = w2.addRow([label, "", kg(g), kg(g) / 1000, matTot > 0 ? g / matTot : 0, "", ref, ""]);
+      row.getCell(3).numFmt = FMT_KG; row.getCell(4).numFmt = FMT_T; row.getCell(5).numFmt = FMT_PCT;
       totalRow(row, col);
     }
     w2.addRow([]);
@@ -520,24 +528,24 @@
       bodyRow(row, i % 2 === 1);
     });
     w2.addRow([]);
-    const n2 = w2.addRow(["Nota: i pesi sono stimati con un peso standard per conferimento (vedi Metodologia). Sorti registra i rifiuti conferiti e separati alla fonte. L'effettivo avvio a riciclo/recupero e la sede delle operazioni (in sito / fuori sito, GRI 306-4c e 306-5c) devono essere confermati dai formulari o dalle dichiarazioni del gestore."]);
-    w2.mergeCells(n2.number, 1, n2.number, 7);
+    const n2 = w2.addRow(["Nota: i pesi sono stimati come conferimenti × peso medio della categoria (vedi fogli Coefficienti e Metodologia). Sorti registra i rifiuti conferiti e separati alla fonte. L'effettivo avvio a riciclo/recupero e la sede delle operazioni (in sito / fuori sito, GRI 306-4c e 306-5c) devono essere confermati dai formulari o dalle dichiarazioni del gestore."]);
+    w2.mergeCells(n2.number, 1, n2.number, 8);
     n2.getCell(1).font = { italic: true, size: 9, color: { argb: C.muted } };
     n2.getCell(1).alignment = { wrapText: true, vertical: "top" };
     n2.height = 34;
 
     // ===== 3. Emissioni evitate =====
-    const w3 = wb.addWorksheet("Emissioni evitate", { views: [{ showGridLines: false, state: "frozen", ySplit: 4 }], properties: { tabColor: { argb: C.blue } } });
+    const w3 = wb.addWorksheet("CO2e potenzialmente evitata", { views: [{ showGridLines: false, state: "frozen", ySplit: 4 }], properties: { tabColor: { argb: C.blue } } });
     w3.columns = [{ width: 26 }, { width: 20 }, { width: 20 }, { width: 22 }];
-    sheetHeader(w3, "Emissioni di CO₂e evitate (stima)",
+    sheetHeader(w3, "CO₂e potenzialmente evitata (stima)",
       "Riportate separatamente dall'inventario GHG: non vanno sottratte dalle emissioni Scope 1, 2 o 3 (GHG Protocol · GRI 305 · ESRS E1).", 4);
     const anyMatCo2 = data.materials.some(m => m.hasCo2);
     const h3 = w3.getRow(4);
-    h3.values = ["Frazione", "Rifiuti (kg)", "CO₂e evitata (kg)", "kg CO₂e per kg di rifiuto"];
+    h3.values = ["Frazione", "Rifiuti stimati (kg)", "CO₂e potenzialmente evitata (kg)", "kg CO₂e per kg di rifiuto"];
     tableHeader(h3);
     if (anyMatCo2) {
       data.materials.forEach((m, i) => {
-        const row = w3.addRow([cap(m.material), kg(m.weight_g), kg(m.co2_g), m.weight_g > 0 ? m.co2_g / m.weight_g : 0]);
+        const row = w3.addRow([S().materialLabel(m.material), kg(m.weight_g), kg(m.co2_g), m.weight_g > 0 ? m.co2_g / m.weight_g : 0]);
         row.getCell(2).numFmt = FMT_KG; row.getCell(3).numFmt = FMT_KG; row.getCell(4).numFmt = "0.000";
         bodyRow(row, i % 2 === 1);
       });
@@ -555,7 +563,7 @@
     w4.columns = [{ width: 16 }, { width: 20 }, { width: 22 }];
     sheetHeader(w4, trendTitle, `Periodo: ${periodTxt}`, 3);
     const h4 = w4.getRow(4);
-    h4.values = [data.fine ? "Ora" : "Data", "Rifiuti raccolti (kg)", "CO₂e evitata (kg, stima)"];
+    h4.values = [data.fine ? "Ora" : "Data", "Rifiuti stimati (kg)", "CO₂e potenzialmente evitata (kg)"];
     tableHeader(h4);
     const firstDataRow = 5;
     data.daily.forEach((d, i) => {
@@ -576,7 +584,7 @@
     w5.columns = [{ width: 26 }, { width: 16 }, { width: 30 }, { width: 22 }, { width: 18 }, { width: 18 }, { width: 14 }, { width: 13 }, { width: 16 }, { width: 20 }];
     sheetHeader(w5, "Dettaglio per cestino", `Periodo: ${periodTxt} · stato al ${genTxt}`, 10);
     const h5 = w5.getRow(4);
-    h5.values = ["Cestino", "Codice", "Posizione", "Cliente", "Rifiuti nel periodo (kg)", "CO₂e evitata (kg)", "Riempimento attuale", "Stato", "Capacità (kg)", "Ultimo conferimento"];
+    h5.values = ["Cestino", "Codice", "Posizione", "Cliente", "Rifiuti stimati nel periodo (kg)", "CO₂e pot. evitata (kg)", "Riempimento attuale", "Stato", "Capacità (kg)", "Ultimo conferimento"];
     tableHeader(h5);
     data.perBin.forEach((p, i) => {
       const b = p.bin;
@@ -624,13 +632,45 @@
       });
     }
 
+    // ===== 5c. Coefficienti di stima =====
+    if (data.coef) {
+      const wC = wb.addWorksheet("Coefficienti", { views: [{ showGridLines: false, state: "frozen", ySplit: 4 }] });
+      wC.columns = [{ width: 20 }, { width: 12 }, { width: 16 }, { width: 18 }, { width: 22 }, { width: 22 }, { width: 28 }];
+      sheetHeader(wC, `Coefficienti di stima · versione ${data.coef.version}`,
+        `Aggiornati il ${data.coef.date ? itDate(new Date(data.coef.date + "T12:00:00")) : "—"} · peso = conferimenti × peso medio · CO₂e = kg stimati × fattore`, 7);
+      const hC = wC.getRow(4);
+      hC.values = ["Categoria", "Campioni (n)", "Peso medio (g)", "Incertezza media (±, 95%)", "CO₂e evitata (kg per t)", "CO₂e per conferimento (g)", "Materiale di riferimento EPA WARM"];
+      tableHeader(hC);
+      Object.values(data.coef.categories || {}).forEach((c, i) => {
+        const w = typeof c.avg_weight_g === "number" ? c.avg_weight_g : null;
+        const row = wC.addRow([c.label, c.samples || 0, w ?? "non stimato",
+          c.uncertainty_95_pct != null ? c.uncertainty_95_pct / 100 : "—",
+          c.co2e_kg_per_t ?? 0, w != null ? w * (c.co2e_kg_per_kg || 0) : "—", c.epa_material || ""]);
+        row.getCell(2).numFmt = "0"; row.getCell(3).numFmt = "0.00"; row.getCell(4).numFmt = "0.0%";
+        row.getCell(5).numFmt = "#,##0.0"; row.getCell(6).numFmt = "0.00";
+        bodyRow(row, i % 2 === 1);
+        row.getCell(1).font = { bold: true };
+      });
+      wC.addRow([]);
+      for (const [k, v] of [["Fonte pesi", data.coef.weights_source], ["Fonte CO₂e", data.coef.co2_source],
+                            ["Scenario di riferimento", data.coef.co2_baseline]]) {
+        const row = wC.addRow([k, v]);
+        wC.mergeCells(row.number, 2, row.number, 7);
+        row.getCell(1).font = { bold: true, color: { argb: C.blue } };
+        row.getCell(2).alignment = { wrapText: true, vertical: "top" };
+        row.height = 30;
+      }
+    }
+
     // ===== 6. Metodologia =====
     const w6 = wb.addWorksheet("Metodologia", { views: [{ showGridLines: false }] });
     w6.columns = [{ width: 30 }, { width: 100 }];
     sheetHeader(w6, "Metodologia, ipotesi e limiti", "Da allegare al report per garantire trasparenza e verificabilità dei dati.", 2);
     const meth = [
       ["Fonte dei dati", "Dati raccolti dai cestini intelligenti Sorti: ogni conferimento viene riconosciuto (frazione) dal sistema di visione del dispositivo e registrato con data e ora."],
-      ["Peso dei rifiuti (stima)", "Nella configurazione attuale i cestini non dispongono di una bilancia: a ogni conferimento è associato un peso standard configurato sul dispositivo. I pesi e le emissioni evitate riportati sono quindi STIME proporzionali al numero di conferimenti e vanno dichiarati come tali. Il dato misurato direttamente è il numero di conferimenti per frazione."],
+      ["Peso dei rifiuti (stima)", data.coef
+        ? `I cestini non dispongono di una bilancia. Il dato misurato è il numero di conferimenti riconosciuti per categoria; il peso è STIMATO come conferimenti × peso medio della categoria. I pesi medi (coefficienti ${data.coef.version}${data.coef.date ? " del " + itDate(new Date(data.coef.date + "T12:00:00")) : ""}) derivano da un campionamento di oggetti reali pesati uno per uno: ${coefSamplesTxt(data.coef)}. Le categorie senza campioni non hanno un peso stimato. Valori e incertezze nel foglio Coefficienti.`
+        : "I cestini non dispongono di una bilancia: i pesi sono STIME proporzionali al numero di conferimenti e vanno dichiarati come tali. Il dato misurato direttamente è il numero di conferimenti per frazione."],
       ["Perimetro", `${data.bins.length} cestini Sorti dell'organizzazione. Il report copre solo i rifiuti conferiti in questi cestini, non la totalità dei rifiuti prodotti dall'organizzazione.`],
       ["Periodo", periodTxt],
       ["GRI 306-3 · ESRS E5-5 (37a)", "Rifiuti generati: somma dei pesi registrati nel periodo, espressi in kg e tonnellate."],
@@ -638,10 +678,13 @@
       ["GRI 306-5 · ESRS E5-5 (37c)", "Rifiuti destinati allo smaltimento: frazione indifferenziata/residua, con destinazione PREVISTA a termovalorizzazione o discarica."],
       ["Destinazione effettiva", "Il sistema registra la separazione alla fonte. L'effettivo trattamento a valle (riciclo, recupero, smaltimento) e la sede delle operazioni vanno confermati con formulari di identificazione rifiuti, MUD o dichiarazioni del gestore."],
       ["Pericolosità", "Le frazioni raccolte sono assunte come rifiuti urbani non pericolosi. Verificare eventuali flussi pericolosi (es. RAEE, pile) gestiti separatamente."],
-      ["Emissioni evitate", "Stima calcolata dal sistema Sorti applicando fattori di emissione per frazione al peso stimato dei conferimenti (vedi “Peso dei rifiuti”). Sono emissioni evitate rispetto a uno scenario di riferimento: secondo GHG Protocol, GRI 305 ed ESRS E1 vanno riportate separatamente e non possono essere sottratte dalle emissioni Scope 1, 2 o 3."],
-      ["Fattori di emissione", "Indicare qui la fonte dei fattori utilizzati dal backend Sorti (es. database ISPRA, DEFRA, Ecoinvent) e l'anno di riferimento, prima della pubblicazione."],
+      ["CO₂e potenzialmente evitata", "Calcolata come kg stimati × fattore di CO₂e evitata della categoria. È un beneficio POTENZIALE rispetto a uno scenario di riferimento, legato all'effettivo avvio a riciclo: secondo GHG Protocol, GRI 305 ed ESRS E1 va riportata separatamente e non può essere sottratta dalle emissioni Scope 1, 2 o 3."],
+      ["Fattori di emissione", data.coef
+        ? `${data.coef.co2_source}. CO₂e evitata = (emissioni dello scenario di riferimento − emissioni del riciclo/compostaggio), con scenario di riferimento: ${String(data.coef.co2_baseline || "").toLowerCase()}. Valori originali in t CO₂e per short ton, convertiti in kg CO₂e per tonnellata metrica (fattore 1,10231). Valori per categoria nel foglio Coefficienti.`
+        : "Indicare qui la fonte dei fattori utilizzati dal backend Sorti e l'anno di riferimento, prima della pubblicazione."],
       ["Stato dei cestini", "Riempimento e stato sono istantanei, rilevati al momento della generazione del report."],
       ["Strumento", "Report generato automaticamente da Sorti SmartBin Console. I valori sono arrotondati al grammo."],
+      ...(data.coef ? [["Versione dei coefficienti", `${data.coef.version}${data.coef.date ? " del " + itDate(new Date(data.coef.date + "T12:00:00")) : ""}. Ogni conferimento registra la versione usata per stimarne peso e CO₂e.`]] : []),
     ];
     meth.forEach(([k, v], i) => {
       const row = w6.addRow([k, v]);
@@ -684,6 +727,20 @@
     a.click();
     a.remove();
     setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+  }
+
+  function coefSamplesTxt(coef) {
+    return Object.values(coef.categories || {}).map(c =>
+      `${c.label} ${c.samples || 0} campioni${typeof c.avg_weight_g === "number" ? ` (media ${c.avg_weight_g.toLocaleString("it-IT", { maximumFractionDigits: 1 })} g)` : " (non stimato)"}`).join("; ");
+  }
+
+  // Coefficienti di stima (server v2.3)
+  async function attachCoefficients(data) {
+    try {
+      data.coef = await S().fetchJSON(S().apiUrl("/api/coefficients"));
+    } catch {
+      data.coef = null;
+    }
   }
 
   // Registro svuotamenti (server v2 + Admin key); senza, il foglio non viene creato
@@ -735,6 +792,7 @@
       }
       const [data] = await Promise.all([dataP, ensureExcelJS()]);
       await attachEmptyings(data);
+      await attachCoefficients(data);
       const wb = await buildWorkbook(data, orgName);
       const hm = (d) => `${pad(d.getHours())}${pad(d.getMinutes())}`;
       const stamp = (data.fine || data.stampTime) ? `${ymd(data.start)}_${hm(data.start)}-${hm(data.end)}` : `${ymd(data.start)}_${ymd(data.end)}`;
