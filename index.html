@@ -8,6 +8,15 @@
 
   <meta name="theme-color" content="#09182F" />
 
+  <!-- App installabile (necessario per le notifiche su iPhone/iPad) -->
+  <link rel="manifest" href="./manifest.webmanifest">
+  <link rel="apple-touch-icon" href="./assets/apple-touch-icon.png">
+  <link rel="icon" type="image/png" sizes="192x192" href="./assets/icon-192.png">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-title" content="Sorti">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+
   <script>
     // Applica il tema prima del primo paint (evita flash)
     (function () {
@@ -25,7 +34,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
 
-  <link rel="stylesheet" href="./app.css?v=330">
+  <link rel="stylesheet" href="./app.css?v=340">
 </head>
 
 <body>
@@ -404,6 +413,20 @@
 
     <div class="setGroup">
       <div class="setLabel">
+        <svg class="ico"><use href="#i-bell" /></svg> Notifiche su questo dispositivo
+        <span id="pushStatus" class="keyStatus">—</span>
+      </div>
+      <div class="setHelp" id="pushHelp">Avviso sul telefono o sul computer quando un cestino è pieno.</div>
+      <div class="exportRow" style="margin-left:24px">
+        <button class="btn btnPrimary" id="btnPushOn" type="button" style="display:none"><svg class="ico"><use href="#i-bell" /></svg><span>Attiva notifiche</span></button>
+        <button class="btn" id="btnPushTest" type="button" style="display:none">Invia notifica di prova</button>
+        <button class="btn btnGhost" id="btnPushOff" type="button" style="display:none">Disattiva</button>
+      </div>
+      <div id="pushDevices" class="notifyLog"></div>
+    </div>
+
+    <div class="setGroup">
+      <div class="setLabel">
         <svg class="ico"><use href="#i-bell" /></svg> Notifiche email
         <span id="notifyStatus" class="keyStatus">—</span>
       </div>
@@ -474,10 +497,11 @@
   </dialog>
 
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-  <script src="./config.js?v=330"></script>
-  <script src="./app.js?v=330"></script>
-  <script src="./report.js?v=330"></script>
-  <script src="./registry.js?v=330"></script>
+  <script src="./config.js?v=340"></script>
+  <script src="./app.js?v=340"></script>
+  <script src="./report.js?v=340"></script>
+  <script src="./registry.js?v=340"></script>
+  <script src="./push.js?v=340"></script>
 </body>
 
 </html>

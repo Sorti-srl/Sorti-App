@@ -1955,6 +1955,13 @@
     wireUI();
     syncResponsiveBinsView();
     startSSE();
-    refresh();
+    // Link da una notifica: ?bin=ID apre direttamente il dettaglio del cestino
+    const qBin = new URLSearchParams(location.search).get("bin");
+    if (qBin) {
+      history.replaceState(null, "", location.pathname + location.hash);
+      refresh().then(() => openBinDrawer(qBin));
+    } else {
+      refresh();
+    }
   });
 })();

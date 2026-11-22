@@ -276,7 +276,7 @@
         <span class="nDot"></span>
         <div class="nMain">
           <div class="nSubj">${esc(n.subject || n.kind)}</div>
-          <div class="nMeta">${esc(fmtDate(n.ts))} · ${n.status === "sent" ? "inviata" : n.status === "error" ? `errore: ${esc(n.error || "")}` : "in invio"}</div>
+          <div class="nMeta">${esc(fmtDate(n.ts))} · ${n.status === "sent" ? "inviata" : n.status === "error" ? `errore: ${esc((n.error || "").length > 140 ? (n.error || "").slice(0, 140) + "…" : (n.error || ""))}` : "in invio"}</div>
         </div>
       </div>`).join("") : "";
     if (st.rejected_events > 0) {
