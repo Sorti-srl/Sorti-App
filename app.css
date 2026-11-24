@@ -1166,3 +1166,9 @@ tbody tr:last-child td{ border-bottom:none; }
 .caseTable td, .caseTable th{ padding:8px 10px; }
 .caseTable th:first-child, .caseTable td:first-child{ width:30%; }
 .caseTable td{ font-size:13px; }
+.coefNote.coefWarn{
+  color:var(--warn-ink); background:var(--warn-soft);
+  border:1px solid color-mix(in srgb, var(--warn) 45%, transparent);
+  border-radius:var(--r-sm); padding:8px 12px; margin-top:10px; text-shadow:none;
+}
+.coefNote.coefWarn b{ color:inherit; }

@@ -1648,7 +1648,13 @@
   function renderCoefNote(c) {
     const el = $("coefNote");
     if (!el) return;
-    if (!c || !c.version) { el.textContent = ""; return; }
+    el.classList.remove("coefWarn");
+    if (!c || !c.version) {
+      // Server precedente alla v2.3: pesi e CO2 non vengono dai coefficienti del campionamento
+      el.classList.add("coefWarn");
+      el.innerHTML = "<b>Server da aggiornare:</b> pesi e CO₂ sono ancora calcolati dal server con il peso fisso inviato dal cestino, non con i coefficienti del campionamento. Installa il server Sorti v2.3: i conferimenti già registrati verranno ricalcolati in automatico.";
+      return;
+    }
     const d = c.date ? new Date(c.date + "T12:00:00").toLocaleDateString("it-IT", { day: "2-digit", month: "2-digit", year: "numeric" }) : "";
     el.innerHTML = `Pesi <b>stimati</b>: conferimenti × peso medio per categoria (coefficienti <b>${escapeHtml(c.version)}</b>${d ? ` del ${d}` : ""}). CO₂ potenzialmente evitata secondo ${escapeHtml(c.co2_source ? c.co2_source.split(",")[0] : "EPA WARM")}${c.co2_baseline ? ` rispetto a ${escapeHtml(String(c.co2_baseline).toLowerCase())}` : ""}.`;
   }
