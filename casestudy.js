@@ -12,6 +12,7 @@
   let infoPromise = null;
   let currentBin = null;
   let lastData = null;
+  let compatMode = false;   // server precedente alla v2.3: conteggio dall'export CSV dei conferimenti
 
   function features() {
     if (!infoPromise) {
@@ -36,9 +37,10 @@
     if (!box) return;
     const f = await features();
     if (currentBin !== bin) return;
-    if (!f.has("summary")) {
+    compatMode = !f.has("summary");
+    if (compatMode && !S().adminKey()) {
       $("caseControls").style.display = "none";
-      box.innerHTML = `<div class="regNotice">Il riepilogo per caso studio richiede il server Sorti aggiornato (versione 2.3).</div>`;
+      box.innerHTML = `<div class="regNotice">Per il riepilogo per caso studio serve la Admin key (Impostazioni).</div>`;
       return;
     }
     $("caseControls").style.display = "";
@@ -59,7 +61,8 @@
     const q = new URLSearchParams({ date_from: from, date_to: to, bin_id: bin.bin_id });
     let d;
     try {
-      d = await S().fetchJSON(S().apiUrl(`/api/stats/summary?${q}`));
+      d = compatMode ? await compatSummary(bin.bin_id, from, to)
+                     : await S().fetchJSON(S().apiUrl(`/api/stats/summary?${q}`));
     } catch (e) {
       box.innerHTML = `<div class="regNotice err">${esc(String(e?.message || e).split("\n")[0])}</div>`;
       return;
@@ -105,6 +108,52 @@
       </div>`;
     $("caseCopyCounts").onclick = () => copy(countsText(), "Conferimenti copiati: incollali nella cella B14 del foglio Caso studio.");
     $("caseCopyTable").onclick = () => copy(tableText(), "Tabella copiata.");
+  }
+
+  // Server precedente alla v2.3: si contano i conferimenti dall'export CSV (Admin key)
+  // e si stimano peso e CO2 con i coefficienti v1 incorporati nella dashboard.
+  const romeDay = (iso) => {
+    const d = new Date(iso);
+    return isNaN(d) ? "" : d.toLocaleDateString("sv-SE", { timeZone: "Europe/Rome" });
+  };
+
+  async function compatSummary(binId, from, to) {
+    const res = await fetch(S().apiUrl("/api/export/events.csv"), {
+      headers: Object.assign({}, S().extraHeaders(), { "X-API-Key": S().adminKey() }),
+    });
+    const text = await res.text();
+    if (!res.ok) throw new Error(`${res.status} ${res.statusText}\n${text}`);
+    const lines = text.split(/\r?\n/).filter(Boolean);
+    const head = (lines.shift() || "").split(",");
+    const iTs = head.indexOf("ts"), iBin = head.indexOf("bin_id"), iMat = head.indexOf("material");
+    if (iTs < 0 || iBin < 0 || iMat < 0) throw new Error("Formato dell'export non riconosciuto");
+    const counts = {};
+    for (const ln of lines) {
+      const c = ln.split(",");
+      if (c[iBin] !== binId) continue;
+      const day = romeDay(c[iTs]);
+      if (!day || day < from || day > to) continue;
+      const k = S().coefKey(c[iMat]);
+      counts[k] = (counts[k] || 0) + 1;
+    }
+    const coef = S().COEF_FALLBACK;
+    const out = [];
+    for (const [key, cat] of Object.entries(coef.categories)) {
+      const n = counts[key] || 0; delete counts[key];
+      const avg = cat.avg_weight_g;
+      out.push({ material: key, label: cat.label, events: n, avg_weight_g: avg,
+                 weight_estimated: typeof avg === "number" && avg > 0,
+                 weight_g: n * S().estWeightG(key), co2_saved_g: n * S().estCo2G(key) });
+    }
+    for (const [key, n] of Object.entries(counts)) {
+      out.push({ material: key, label: key, events: n, avg_weight_g: null, weight_estimated: false,
+                 weight_g: 0, co2_saved_g: 0, unknown: true });
+    }
+    return {
+      categories: out, coefficients: S().coefMeta(), versions_in_period: [],
+      totals: { events: out.reduce((s, x) => s + x.events, 0), weight_g: out.reduce((s, x) => s + x.weight_g, 0),
+                co2_saved_g: out.reduce((s, x) => s + x.co2_saved_g, 0) },
+    };
   }
 
   // Solo le 6 categorie del foglio Excel, una per riga, nell'ordine B14:B19

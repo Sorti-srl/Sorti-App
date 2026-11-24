@@ -131,10 +131,19 @@
       day: r.day, date: parseDay(r.day), weight_g: Number(r.weight_g || 0), co2_g: Number(r.co2_saved_g || 0)
     }));
 
-    const totalW = daily.reduce((s, r) => s + r.weight_g, 0);
-    const totalCO2 = daily.reduce((s, r) => s + r.co2_g, 0);
+    let totalW = daily.reduce((s, r) => s + r.weight_g, 0);
+    let totalCO2 = daily.reduce((s, r) => s + r.co2_g, 0);
     const materials = [...matMap.values()].sort((a, b) => b.weight_g - a.weight_g);
     const matW = materials.reduce((s, m) => s + m.weight_g, 0);
+
+    // Server precedente alla v2.3: i valori sono ricalcolati con i coefficienti nella dashboard.
+    // I totali esatti sono quelli per materiale; l'andamento giornaliero si scala in proporzione.
+    if (dash?._compat && okDetails === bins.length && bins.length) {
+      const matC = materials.reduce((s, m) => s + m.co2_g, 0);
+      const kW = totalW > 0 ? matW / totalW : 1, kC = totalCO2 > 0 ? matC / totalCO2 : 1;
+      for (const r of daily) { r.weight_g *= kW; r.co2_g *= kC; }
+      totalW = matW; totalCO2 = matC;
+    }
 
     if (totalW > 0 && matW > 0 && Math.abs(matW - totalW) / totalW > 0.01) {
       notes.push(`Il totale per materiale (${kg(matW).toLocaleString("it-IT")} kg) differisce dal totale giornaliero (${kg(totalW).toLocaleString("it-IT")} kg): verificare la completezza dei dati.`);
@@ -738,8 +747,10 @@
   async function attachCoefficients(data) {
     try {
       data.coef = await S().fetchJSON(S().apiUrl("/api/coefficients"));
+      if (!data.coef?.categories) throw new Error("coefficienti non disponibili");
     } catch {
-      data.coef = null;
+      // Server precedente alla v2.3: stessi coefficienti v1, incorporati nella dashboard
+      data.coef = S().COEF_FALLBACK || null;
     }
   }
 
