@@ -1166,28 +1166,3 @@ tbody tr:last-child td{ border-bottom:none; }
 .caseTable td, .caseTable th{ padding:8px 10px; }
 .caseTable th:first-child, .caseTable td:first-child{ width:30%; }
 .caseTable td{ font-size:13px; }
-
-/* Contatore conferimenti per categoria */
-.counterCard{ padding-bottom:16px; }
-.counterCard .cardHeader{ margin-bottom:12px; }
-.counterGrid{ display:grid; grid-template-columns: repeat(7, minmax(0,1fr)); gap:10px; }
-@media (max-width:1100px){ .counterGrid{ grid-template-columns: repeat(4, minmax(0,1fr)); } }
-@media (max-width:520px){ .counterGrid{ grid-template-columns: repeat(2, minmax(0,1fr)); } }
-.cntItem{
-  display:flex; flex-direction:column; gap:4px;
-  padding:12px 14px; border-radius:var(--r);
-  background:var(--surface-2); border:1px solid var(--border);
-  position:relative; overflow:hidden;
-}
-.cntItem::before{ content:""; position:absolute; left:0; top:0; bottom:0; width:3px; background:var(--cnt-c, transparent); }
-.cntDot{ position:absolute; left:0; top:0; bottom:0; width:4px; }
-.cntLabel{ font-size:12.5px; font-weight:700; color:var(--muted); }
-.cntNum{ font-size:28px; font-weight:800; letter-spacing:-.8px; line-height:1.1; display:inline-block; transform-origin:left center; }
-.cntNum.bump{ animation: bump .6s cubic-bezier(.2,.9,.3,1.4); color:var(--brand-ink); }
-.cntTotal{ background:var(--navy); border-color:transparent; }
-.cntTotal .cntLabel{ color:rgba(255,255,255,.75); }
-.cntTotal .cntNum{ color:var(--lime); }
-[data-theme="glass"] .cntItem{ background: rgba(255,255,255,.38); }
-[data-theme="glass"] .cntTotal{ background: rgba(9,24,47,.88); }
-#counterOther{ margin-top:8px; }
-@media (max-width:1100px){ .cntTotal{ grid-column: span 2; } }
