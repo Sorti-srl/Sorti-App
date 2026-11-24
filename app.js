@@ -1811,18 +1811,75 @@
   }
 
   // Somma per cestino dei valori ricalcolati nel periodo (server precedente alla v2.3)
-  async function compatRangeTotals(bins, days) {
+  // Dettaglio di tutti i cestini nel periodo (per totali e contatore per categoria)
+  async function fetchRangeDetails(bins, days) {
     try {
-      const det = await Promise.all((bins || []).map(b => fetchBinDetail(b.bin_id, days, 1)));
-      let w = 0, c = 0, oc = 0;
-      for (const d of det) {
-        if (!d?._compat) return null;
-        w += d._compat.newW; c += d._compat.newC; oc += d._compat.origC;
-      }
-      return { w, c, kC: oc > 0 ? c / oc : 1 };
+      return await Promise.all((bins || []).map(b => fetchBinDetail(b.bin_id, days, 1)));
     } catch {
       return null;
     }
+  }
+
+  function compatRangeTotals(det) {
+    if (!det) return null;
+    let w = 0, c = 0, oc = 0;
+    for (const d of det) {
+      if (!d?._compat) return null;
+      w += d._compat.newW; c += d._compat.newC; oc += d._compat.origC;
+    }
+    return { w, c, kC: oc > 0 ? c / oc : 1 };
+  }
+
+  // =========================================================
+  // Contatore dei conferimenti per categoria (periodo selezionato)
+  // =========================================================
+  function countsFromByMaterial(lists) {
+    const out = {};
+    for (const list of lists) {
+      for (const r of list || []) {
+        const k = coefKey(r.material);
+        const n = Number(r.events);
+        if (Number.isFinite(n)) out[k] = (out[k] || 0) + n;
+      }
+    }
+    return out;
+  }
+
+  function renderCounter(counts) {
+    const box = $("counterGrid");
+    if (!box) return;
+    const cats = Object.entries(COEF_FALLBACK.categories);
+    if (!box.dataset.built) {
+      box.innerHTML = cats.map(([k, c]) => `
+        <div class="cntItem" data-mat="${k}">
+          <span class="cntDot" style="background:${materialColor(k)}"></span>
+          <span class="cntLabel">${escapeHtml(c.label)}</span>
+          <span class="cntNum num" id="cnt-${k}">—</span>
+        </div>`).join("") + `
+        <div class="cntItem cntTotal">
+          <span class="cntLabel">Totale</span>
+          <span class="cntNum num" id="cnt-total">—</span>
+        </div>`;
+      box.dataset.built = "1";
+    }
+    const fmt = (v) => Math.round(v).toLocaleString("it-IT");
+    if (!counts) {
+      for (const [k] of cats) { const el = $(`cnt-${k}`); if (el) el.textContent = "—"; delete kpiValues[`cnt-${k}`]; }
+      const t = $("cnt-total"); if (t) t.textContent = "—"; delete kpiValues["cnt-total"];
+      $("counterOther").textContent = "";
+      return;
+    }
+    let total = 0, other = 0;
+    for (const [k] of cats) {
+      const n = counts[k] || 0;
+      total += n;
+      animateNumber(`cnt-${k}`, n, fmt);
+    }
+    for (const [k, n] of Object.entries(counts)) {
+      if (!COEF_FALLBACK.categories[k]) { other += n; total += n; }
+    }
+    animateNumber("cnt-total", total, fmt);
+    $("counterOther").textContent = other ? `+ ${other} conferiment${other === 1 ? "o" : "i"} di altre categorie (incluse nel totale)` : "";
   }
 
   function renderCoefNote(c) {
@@ -1916,9 +1973,17 @@
         series = daily.map(r => ({ label: r.day, v: Number(r.co2_saved_g || 0) }));
       }
 
+      // Dettaglio dei cestini nel periodo: contatore per categoria (e totali esatti col server precedente)
+      const details = range.hours === 1 ? null : await fetchRangeDetails(binsAll, days);
+      if (range.hours === 1) {
+        renderCounter(fineAgg ? countsFromByMaterial([fineAgg.materials]) : null);
+      } else {
+        renderCounter(details ? countsFromByMaterial(details.map(d => d?.by_material)) : null);
+      }
+
       // Server precedente alla v2.3: totali del periodo esatti dal dettaglio dei cestini
       if (dash?._compat && rangeW !== null && !(fineAgg && range.hours === 1)) {
-        const exact = await compatRangeTotals(binsAll, days);
+        const exact = compatRangeTotals(details);
         if (exact) {
           rangeW = exact.w;
           rangeC = exact.c;
