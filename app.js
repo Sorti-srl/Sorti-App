@@ -340,8 +340,173 @@
     const res = await fetch(url, opts);
     const text = await res.text();
     if (!res.ok) throw new Error(`${res.status} ${res.statusText}\n${text}`);
-    try { return JSON.parse(text); }
+    let data;
+    try { data = JSON.parse(text); }
     catch { throw new Error(`Risposta non-JSON da ${url}\n${text}`); }
+    return compatTransform(url, opts, data);
+  }
+
+  // =========================================================
+  // Coefficienti di stima v1 (pesi medi del campionamento del 22/11/2026, CO2 EPA WARM v16).
+  // Sono gli stessi di sorti_api/coefficienti.json del server v2.3.
+  // Finché sul server gira la versione precedente (peso fisso inviato dal cestino e vecchi
+  // fattori CO2), la dashboard ricalcola qui pesi e CO2 con questi coefficienti.
+  // Con il server v2.3 i valori arrivano già corretti e questa parte non interviene.
+  // =========================================================
+  const COEF_FALLBACK = {
+    "version": "v1",
+    "date": "2026-11-22",
+    "weights_source": "Campionamento pesate Sorti del 22/11/2026 (file Sorti_campionamento_pesate_casi_studio.xlsx, foglio 'Pesi medi', media per categoria su tutti i contesti). Peso stimato = conferimenti riconosciuti x peso medio della categoria.",
+    "co2_source": "EPA WARM v16 (dicembre 2023), Management Practices Chapters, Exhibit 1-1, pag. 1-1",
+    "co2_baseline": "Termovalorizzazione",
+    "co2_unit": "kg CO2e potenzialmente evitata per kg di rifiuto (= kg CO2e per t / 1000)",
+    "categories": {
+      "plastica": {
+        "label": "Plastica",
+        "avg_weight_g": 6.01063829787234,
+        "samples": 47,
+        "uncertainty_95_pct": 30.3,
+        "co2e_kg_per_t": 2414.0589,
+        "co2e_kg_per_kg": 2.4140589,
+        "epa_material": "Mixed Plastics"
+      },
+      "carta": {
+        "label": "Carta",
+        "avg_weight_g": 7.09375,
+        "samples": 32,
+        "uncertainty_95_pct": 36.4,
+        "co2e_kg_per_t": 3373.068599999999,
+        "co2e_kg_per_kg": 3.373068599999999,
+        "epa_material": "Mixed Paper (general)"
+      },
+      "metallo": {
+        "label": "Alluminio",
+        "avg_weight_g": 6.117647058823529,
+        "samples": 17,
+        "uncertainty_95_pct": 37.1,
+        "co2e_kg_per_t": 10097.159599999999,
+        "co2e_kg_per_kg": 10.0971596,
+        "epa_material": "Aluminum Cans"
+      },
+      "vetro": {
+        "label": "Vetro",
+        "avg_weight_g": 162.9090909090909,
+        "samples": 11,
+        "uncertainty_95_pct": 23.1,
+        "co2e_kg_per_t": 341.71610000000004,
+        "co2e_kg_per_kg": 0.3417161,
+        "epa_material": "Glass"
+      },
+      "organico": {
+        "label": "Organico",
+        "avg_weight_g": null,
+        "samples": 0,
+        "uncertainty_95_pct": null,
+        "co2e_kg_per_t": 22.046199999999985,
+        "co2e_kg_per_kg": 0.022046199999999985,
+        "epa_material": "Food Waste (compostaggio)"
+      },
+      "indifferenziato": {
+        "label": "Indifferenziato",
+        "avg_weight_g": 1.8324999999999996,
+        "samples": 12,
+        "uncertainty_95_pct": 59.6,
+        "co2e_kg_per_t": 0,
+        "co2e_kg_per_kg": 0.0,
+        "epa_material": "— nessun beneficio"
+      }
+    }
+  };
+
+  const COEF_ALIASES = {
+    metalli: "metallo", alluminio: "metallo", lattine: "metallo", lattina: "metallo", metal: "metallo",
+    plastic: "plastica", plastiche: "plastica", paper: "carta", cartone: "carta", "carta e cartone": "carta",
+    glass: "vetro", vetri: "vetro", umido: "organico", organic: "organico", food: "organico",
+    secco: "indifferenziato", residuo: "indifferenziato", general: "indifferenziato",
+  };
+  const LS_FIXED_W = "sorti_fixed_weight_g";
+  let fixedWeightG = Number(localStorage.getItem(LS_FIXED_W)) || 20;   // peso fisso inviato dal cestino
+  let compatActive = false;
+
+  function coefKey(m) {
+    const k = String(m || "").trim().toLowerCase();
+    return COEF_ALIASES[k] || k;
+  }
+  function coefCat(m) { return COEF_FALLBACK.categories[coefKey(m)] || null; }
+  function estWeightG(m) {
+    const w = coefCat(m)?.avg_weight_g;
+    return typeof w === "number" && w > 0 ? w : 0;
+  }
+  function estCo2G(m) { return estWeightG(m) * (coefCat(m)?.co2e_kg_per_kg || 0); }
+  function coefMeta() {
+    const c = COEF_FALLBACK;
+    return { version: c.version, date: c.date, co2_source: c.co2_source, co2_baseline: c.co2_baseline, client_side: true };
+  }
+
+  // Il peso fisso del cestino si ricava dai conferimenti recenti (valore più frequente)
+  function learnFixedWeight(events) {
+    const freq = {};
+    for (const e of events || []) {
+      const w = Number(e?.weight_g);
+      if (w > 0) freq[w] = (freq[w] || 0) + 1;
+    }
+    const best = Object.entries(freq).sort((a, b) => b[1] - a[1])[0];
+    if (best) {
+      fixedWeightG = Number(best[0]);
+      localStorage.setItem(LS_FIXED_W, String(fixedWeightG));
+    }
+  }
+
+  function fixEvent(e) {
+    return Object.assign({}, e, {
+      reported_weight_g: e.weight_g,
+      weight_g: estWeightG(e.material),
+      co2_saved_g: estCo2G(e.material),
+    });
+  }
+
+  // Per materiale: conferimenti = peso inviato / peso fisso; poi peso e CO2 dai coefficienti
+  function fixByMaterial(list) {
+    return (list || []).map(r => {
+      const n = Number.isFinite(Number(r.events)) && r.events !== undefined
+        ? Number(r.events)
+        : Math.round(Number(r.weight_g || 0) / fixedWeightG);
+      return Object.assign({}, r, { events: n, weight_g: n * estWeightG(r.material), co2_saved_g: n * estCo2G(r.material) });
+    });
+  }
+  const sumW = (l) => (l || []).reduce((s, r) => s + Number(r.weight_g || 0), 0);
+  const sumC = (l) => (l || []).reduce((s, r) => s + Number(r.co2_saved_g || 0), 0);
+
+  function compatTransform(url, opts, data) {
+    if ((opts?.method || "GET").toUpperCase() !== "GET" || !data || typeof data !== "object") return data;
+    let path = "";
+    try { path = new URL(url, location.href).pathname; } catch { return data; }
+    const isDash = /\/api\/dashboard$/.test(path);
+    const isBin = /\/api\/bins\/[^/]+$/.test(path);
+    if (!isDash && !isBin) return data;
+    if (data.coefficients) { compatActive = false; return data; }   // server v2.3: valori già corretti
+    compatActive = true;
+
+    learnFixedWeight(data.recent_events);
+    const origW = sumW(data.by_material), origC = sumC(data.by_material);
+    const origDaily = (data.daily || []).map(r => Object.assign({}, r));
+    data.by_material = fixByMaterial(data.by_material);
+    const newW = sumW(data.by_material), newC = sumC(data.by_material);
+    const rW = origW > 0 ? newW / origW : 1, rC = origC > 0 ? newC / origC : 1;
+    // Andamento giornaliero: il server vecchio non lo divide per materiale, si scala in proporzione
+    data.daily = origDaily.map(r => Object.assign({}, r, {
+      weight_g: Number(r.weight_g || 0) * rW, co2_saved_g: Number(r.co2_saved_g || 0) * rC,
+    }));
+    data.recent_events = (data.recent_events || []).map(fixEvent);
+    if (isDash) {
+      data.totals = Object.assign({}, data.totals, { total_weight_g: newW, total_co2_saved_g: newC });
+      data.bins = (data.bins || []).map(b => Object.assign({}, b, { current_weight_g: Number(b.current_weight_g || 0) * rW }));
+    } else if (data.bin) {
+      data.bin = Object.assign({}, data.bin, { current_weight_g: Number(data.bin.current_weight_g || 0) * rW });
+    }
+    data.coefficients = coefMeta();
+    data._compat = { origW, origC, newW, newC, origDaily };
+    return data;
   }
 
   async function downloadFile(url, filename, headers) {
@@ -1645,6 +1810,26 @@
     if (mSub) mSub.textContent = (fineAgg && fineAgg.complete) ? `Peso stimato per frazione · ${range.label.toLowerCase()}` : "Peso stimato per frazione · storico";
   }
 
+  // Somma per cestino dei valori ricalcolati nel periodo (server precedente alla v2.3)
+  // Dettaglio di tutti i cestini nel periodo (per totali e contatore per categoria)
+  async function fetchRangeDetails(bins, days) {
+    try {
+      return await Promise.all((bins || []).map(b => fetchBinDetail(b.bin_id, days, 1)));
+    } catch {
+      return null;
+    }
+  }
+
+  function compatRangeTotals(det) {
+    if (!det) return null;
+    let w = 0, c = 0, oc = 0;
+    for (const d of det) {
+      if (!d?._compat) return null;
+      w += d._compat.newW; c += d._compat.newC; oc += d._compat.origC;
+    }
+    return { w, c, kC: oc > 0 ? c / oc : 1 };
+  }
+
   function renderCoefNote(c) {
     const el = $("coefNote");
     if (!el) return;
@@ -1734,6 +1919,19 @@
         rangeW = daily.reduce((s, r) => s + Number(r.weight_g || 0), 0);
         rangeC = daily.reduce((s, r) => s + Number(r.co2_saved_g || 0), 0);
         series = daily.map(r => ({ label: r.day, v: Number(r.co2_saved_g || 0) }));
+      }
+
+      // Server precedente alla v2.3: totali del periodo esatti dal dettaglio dei cestini
+      if (dash?._compat && rangeW !== null && !(fineAgg && range.hours === 1)) {
+        const exact = compatRangeTotals(await fetchRangeDetails(binsAll, days));
+        if (exact) {
+          rangeW = exact.w;
+          rangeC = exact.c;
+          const usesDaily = !(fineAgg && (range.hours !== 24 || fineAgg.complete));
+          if (usesDaily) {
+            series = dash._compat.origDaily.map(r => ({ label: r.day, v: Number(r.co2_saved_g || 0) * exact.kC }));
+          }
+        }
       }
 
       if (rangeW === null) {
@@ -1968,6 +2166,7 @@
     getRangeDays: () => getRange().days,
     getRange, aggregateEvents, FINE_EVENTS_LIMIT,
     binTitle, binsById, escapeHtml, timeAgo, isoToNice, fetchBinDetail, extraHeaders, materialLabel, formatWeight,
+    COEF_FALLBACK, coefKey, estWeightG, estCo2G, coefMeta, isCompat: () => compatActive,
     refresh: () => refresh(),
     reopenDrawer: () => { if (drawerOpen && activeBinId) openBinDrawer(activeBinId, { soft: true }); },
   };
